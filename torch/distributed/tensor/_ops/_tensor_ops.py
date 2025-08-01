@@ -44,7 +44,7 @@ aten = torch.ops.aten
 def propagate_single_input_strategy(op_schema: OpSchema) -> StrategyType:
     # For ops with a single tensor input, we perform a 1:1 mapping such that
     # for each strategy that the input supports, we create a corresponding strategy.
-    # Note: this may be a complete waste of work, becuase it should be equivalent to
+    # Note: this may be a complete waste of work, because it should be equivalent to
     # `return first_input_strategy` (unless creating a deep copy is important for some reason)
     assert len([s for s in op_schema.args_schema if isinstance(s, OpStrategy)]) == 1, (
         "propagate_single_input_strategy only works for single-tensor-input ops"
@@ -528,7 +528,7 @@ def gen_slice_scatter_strategy(op_schema: OpSchema) -> StrategyType:
                     input_specs=(input_spec, src_spec),
                     redistribute_cost=[
                         generate_redistribute_costs(input_strategy, input_spec),
-                        generate_redistribute_costs(input_strategy, src_spec),
+                        generate_redistribute_costs(src_strategy, src_spec),
                     ],
                 )
             )
@@ -547,7 +547,7 @@ def gen_slice_scatter_strategy(op_schema: OpSchema) -> StrategyType:
                     input_specs=(input_spec, src_spec),
                     redistribute_cost=[
                         generate_redistribute_costs(input_strategy, input_spec),
-                        generate_redistribute_costs(input_strategy, src_spec),
+                        generate_redistribute_costs(src_strategy, src_spec),
                     ],
                 )
             )
@@ -565,7 +565,13 @@ def replica_only_strategy(op_schema: OpSchema) -> StrategyType:
 
 
 @register_op_strategy(
-    [aten.scatter_.value, aten.scatter.value, aten.scatter_.src, aten.scatter.src],
+    [
+        aten.scatter_.value,
+        aten.scatter.value,
+        aten.scatter_.src,
+        aten.scatter.src,
+        aten.scatter_add.default,
+    ],
     schema_info=RuntimeSchemaInfo(1),
 )
 def scatter_strategy(op_schema: OpSchema) -> StrategyType:

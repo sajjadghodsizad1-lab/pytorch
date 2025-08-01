@@ -221,9 +221,9 @@ pygments==2.15.0
 #Pinned versions: 2.12.0
 #test that import: the doctests
 
-#PyYAML
+#pyyaml
 #Description: data serialization format
-#Pinned versions:
+#Pinned versions: 6.0.2
 #test that import:
 
 #requests
@@ -233,7 +233,7 @@ pygments==2.15.0
 
 #rich
 #Description: rich text and beautiful formatting in the terminal
-#Pinned versions: 10.9.0
+#Pinned versions: 14.1.0
 #test that import:
 
 scikit-image==0.19.3 ; python_version < "3.10"
@@ -363,10 +363,9 @@ pwlf==2.2.1
 
 
 # To build PyTorch itself
-packaging>=24.2
 pyyaml
 pyzstd
-setuptools>=77.0.0
+setuptools>=70.1.0
 six
 
 scons==4.5.2 ; platform_machine == "aarch64"
@@ -390,3 +389,9 @@ tlparse==0.3.30
 cuda-bindings>=12.0,<13.0 ; platform_machine != "s390x"
 #Description: required for testing CUDAGraph::raw_cuda_graph(). See https://nvidia.github.io/cuda-python/cuda-bindings/latest/support.html for how this version was chosen. Note "Any fix in the latest bindings would be backported to the prior major version" means that only the newest version of cuda-bindings will get fixes. Depending on the latest version of 12.x is okay because all 12.y versions will be supported via "CUDA minor version compatibility". Pytorch builds against 13.z versions of cuda toolkit work with 12.x versions of cuda-bindings as well because newer drivers work with old toolkits.
 #test that import: test_cuda.py
+
+setuptools-git-versioning==2.1.0
+scikit-build==0.18.1
+pyre-extensions==0.0.32
+tabulate==0.9.0
+#Description: These package are needed to build FBGEMM and torchrec on PyTorch CI
