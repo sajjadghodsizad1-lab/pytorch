@@ -3,6 +3,8 @@
 #include <ATen/native/Resize.h>
 #include <ATen/native/mkldnn/xpu/detail/oneDNN.h>
 #include <torch/library.h>
+#include <ATen/native/mkldnn/xpu/Blas.h>
+#include <ATen/native/DispatchStub.h>
 #ifndef AT_PER_OPERATOR_HEADERS
 
 #include <ATen/Functions.h>
@@ -167,8 +169,13 @@ Tensor& mm_out(const Tensor& self, const Tensor& mat2, Tensor& result) {
     return result;
   }
 
-  TORCH_CHECK(
-      !self.is_complex(), "Complex datatype matmul is not supported in oneDNN");
+  // TORCH_CHECK(
+  //     !self.is_complex(), "Complex datatype matmul is not supported in oneDNN");
+  if (self.is_complex()) {
+    mm_complex_stub(at::kXPU, self, mat2, result);
+    return result;
+  }
+
 
   onednn::matmul(result, self, mat2, Tensor(), true, onednn::Attr());
   return result;
@@ -559,4 +566,9 @@ Tensor _int_mm_xpu(const Tensor& self, const Tensor& mat2) {
       at::empty({self.size(0), mat2.size(1)}, self.options().dtype(at::kInt));
   return _int_mm_out_xpu(self, mat2, result);
 }
+
+DEFINE_DISPATCH(mm_complex_stub);
+REGISTER_NO_CPU_DISPATCH(mm_complex_stub);
+
+
 } // namespace at::native
