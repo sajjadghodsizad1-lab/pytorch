@@ -15,7 +15,6 @@ import time
 import traceback
 import types
 import unittest
-import warning
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
@@ -723,7 +722,7 @@ class MultiProcessTestCase(TestCase):
         if common_utils.SEED and common_utils.SEED != hardcoded_seed:
             msg = ("Distributed tests do not support setting the seed via the command line. "
                    f"the seed will be reset to its default value ({hardcoded_seed} now")
-            warning.warn(msg)
+            logger.warning(msg)
         common_utils.SEED = hardcoded_seed
         for rank in range(int(self.world_size)):
             parent_conn, child_conn = torch.multiprocessing.Pipe()
