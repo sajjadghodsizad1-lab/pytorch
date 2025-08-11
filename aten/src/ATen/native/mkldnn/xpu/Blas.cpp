@@ -172,7 +172,11 @@ Tensor& mm_out(const Tensor& self, const Tensor& mat2, Tensor& result) {
   // TORCH_CHECK(
   //     !self.is_complex(), "Complex datatype matmul is not supported in oneDNN");
   if (self.is_complex()) {
-    mm_complex_stub(at::kXPU, self, mat2, result);
+    if (mm_complex_stub.is_device_supported(self.device().type())) {
+      mm_complex_stub(at::kXPU, self, mat2, result);
+    } else {
+      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
+    }
     return result;
   }
 
