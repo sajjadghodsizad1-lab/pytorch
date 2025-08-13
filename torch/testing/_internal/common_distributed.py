@@ -732,8 +732,10 @@ class MultiProcessTestCase(TestCase):
         # distributed tests don't support setting the seed via the command line so hardcode it here.
         hardcoded_seed = 1234
         if common_utils.SEED and common_utils.SEED != hardcoded_seed:
-            msg = ("Distributed tests do not support setting the seed via the command line. "
-                   f"the seed will be reset to its default value ({hardcoded_seed} now")
+            msg = (
+                "Distributed tests do not support setting the seed via the command line. "
+                f"the seed will be reset to its default value ({hardcoded_seed} now"
+            )
             logger.warning(msg)
         common_utils.SEED = hardcoded_seed
         for rank in range(int(self.world_size)):
