@@ -52,7 +52,7 @@ Tensor& addmm_out(
       mat1.dtype(),
       " != ",
       mat2.dtype())
-
+  // complex case
   if (self.is_complex()) {
     if (addmm_complex_stub.is_device_supported(self.device().type())) {
       addmm_complex_stub(at::kXPU, self, mat1, mat2, beta, alpha, result);
@@ -586,7 +586,6 @@ Tensor _int_mm_xpu(const Tensor& self, const Tensor& mat2) {
   return _int_mm_out_xpu(self, mat2, result);
 }
 
-// XPU complex dispatch
 DEFINE_DISPATCH(mm_complex_stub);
 DEFINE_DISPATCH(bmm_complex_stub);
 DEFINE_DISPATCH(addmm_complex_stub);
