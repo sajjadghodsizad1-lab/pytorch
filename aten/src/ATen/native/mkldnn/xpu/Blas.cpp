@@ -1,10 +1,10 @@
 #define TORCH_ASSERT_ONLY_METHOD_OPERATORS
 #include <ATen/WrapDimUtilsMulti.h>
+#include <ATen/native/DispatchStub.h>
 #include <ATen/native/Resize.h>
+#include <ATen/native/mkldnn/xpu/Blas.h>
 #include <ATen/native/mkldnn/xpu/detail/oneDNN.h>
 #include <torch/library.h>
-#include <ATen/native/mkldnn/xpu/Blas.h>
-#include <ATen/native/DispatchStub.h>
 #ifndef AT_PER_OPERATOR_HEADERS
 
 #include <ATen/Functions.h>
@@ -52,9 +52,15 @@ Tensor& addmm_out(
       mat1.dtype(),
       " != ",
       mat2.dtype())
-  // complex case
-  TORCH_CHECK(
-      !mat1.is_complex(), "Complex datatype matmul is not supported in oneDNN");
+
+  if (self.is_complex()) {
+    if (addmm_complex_stub.is_device_supported(self.device().type())) {
+      addmm_complex_stub(at::kXPU, self, mat1, mat2, beta, alpha, result);
+    } else {
+      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
+    }
+    return result;
+  }
 
   std::vector<int64_t> result_shape = {mat1.size(0), mat2.size(1)};
   result.resize_(result_shape);
@@ -169,8 +175,6 @@ Tensor& mm_out(const Tensor& self, const Tensor& mat2, Tensor& result) {
     return result;
   }
 
-  // TORCH_CHECK(
-  //     !self.is_complex(), "Complex datatype matmul is not supported in oneDNN");
   if (self.is_complex()) {
     if (mm_complex_stub.is_device_supported(self.device().type())) {
       mm_complex_stub(at::kXPU, self, mat2, result);
@@ -179,7 +183,6 @@ Tensor& mm_out(const Tensor& self, const Tensor& mat2, Tensor& result) {
     }
     return result;
   }
-
 
   onednn::matmul(result, self, mat2, Tensor(), true, onednn::Attr());
   return result;
@@ -219,9 +222,14 @@ Tensor& baddbmm_out(
       input.sizes());
 
   // complex case
-  TORCH_CHECK(
-      !batch1.is_complex(),
-      "Complex datatype matmul is not supported in oneDNN");
+  if (input.is_complex()) {
+    if (baddbmm_complex_stub.is_device_supported(input.device().type())) {
+      baddbmm_complex_stub(at::kXPU, input, batch1, batch2, beta, alpha, result);
+    } else {
+      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
+    }
+    return result;
+  }
 
   // general case
   onednn::Attr attr;
@@ -268,8 +276,15 @@ Tensor& bmm_out(const Tensor& self, const Tensor& batch2, Tensor& result) {
     return result;
   }
 
-  TORCH_CHECK(
-      !self.is_complex(), "Complex datatype matmul is not supported in oneDNN");
+  if (self.is_complex()) {
+    if (bmm_complex_stub.is_device_supported(self.device().type())) {
+      bmm_complex_stub(at::kXPU, self, batch2, result);
+    } else {
+      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
+    }
+    return result;
+  }
+
   onednn::matmul(result, self, batch2, at::Tensor(), true, onednn::Attr());
   return result;
 }
@@ -571,8 +586,14 @@ Tensor _int_mm_xpu(const Tensor& self, const Tensor& mat2) {
   return _int_mm_out_xpu(self, mat2, result);
 }
 
+// XPU complex dispatch
 DEFINE_DISPATCH(mm_complex_stub);
+DEFINE_DISPATCH(bmm_complex_stub);
+DEFINE_DISPATCH(addmm_complex_stub);
+DEFINE_DISPATCH(baddbmm_complex_stub);
 REGISTER_NO_CPU_DISPATCH(mm_complex_stub);
-
+REGISTER_NO_CPU_DISPATCH(bmm_complex_stub);
+REGISTER_NO_CPU_DISPATCH(addmm_complex_stub);
+REGISTER_NO_CPU_DISPATCH(baddbmm_complex_stub);
 
 } // namespace at::native
