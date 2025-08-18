@@ -224,7 +224,8 @@ Tensor& baddbmm_out(
   // complex case
   if (input.is_complex()) {
     if (baddbmm_complex_stub.is_device_supported(input.device().type())) {
-      baddbmm_complex_stub(at::kXPU, input, batch1, batch2, beta, alpha, result);
+      baddbmm_complex_stub(
+          at::kXPU, input, batch1, batch2, beta, alpha, result);
     } else {
       TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
     }
