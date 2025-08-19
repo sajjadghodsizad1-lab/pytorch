@@ -5,6 +5,7 @@
 #include <ATen/native/mkldnn/xpu/Blas.h>
 #include <ATen/native/mkldnn/xpu/detail/oneDNN.h>
 #include <torch/library.h>
+#include <oneapi/mkl/blas.hpp>
 #ifndef AT_PER_OPERATOR_HEADERS
 
 #include <ATen/Functions.h>
@@ -586,6 +587,294 @@ Tensor _int_mm_xpu(const Tensor& self, const Tensor& mat2) {
       at::empty({self.size(0), mat2.size(1)}, self.options().dtype(at::kInt));
   return _int_mm_out_xpu(self, mat2, result);
 }
+
+inline at::Tensor resolveViewsAndConjugation(const at::Tensor& input) {
+  at::Tensor input_resolved = input.is_conj() ? input.resolve_conj() : input;
+  at::Tensor input_contiguous = input_resolved.is_contiguous() ? input_resolved : input_resolved.contiguous();
+
+  return input_contiguous;
+}
+
+template<typename T>
+at::Tensor& mm_complex_out_xpu_impl(
+    const at::Tensor& self,
+    const at::Tensor& mat2,
+    at::Tensor& out) {
+  //std::cout << "Hello mm" << std::endl;
+  //std::cout << "Self sizes: " << self.sizes() << std::endl;
+
+  //std::cout << "Out before: " << out << std::endl;
+  
+  at::Tensor self_cont = resolveViewsAndConjugation(self);
+  at::Tensor mat2_cont = resolveViewsAndConjugation(mat2);
+  at::Tensor out_cont = resolveViewsAndConjugation(out);
+
+  const int64_t m = self_cont.sizes().at(0);
+  const int64_t n = mat2_cont.sizes().at(1);
+  const int64_t k = self_cont.sizes().at(1);
+
+  constexpr std::complex<T> alpha = {T(1.0), T(0.0)};
+  constexpr std::complex<T> beta = {T(0.0), T(0.0)};
+
+  oneapi::mkl::blas::row_major::gemm(
+      c10::xpu::getCurrentXPUStream().queue(),
+      oneapi::mkl::transpose::nontrans,
+      oneapi::mkl::transpose::nontrans,
+      m,
+      n,
+      k,
+      alpha,
+      reinterpret_cast<const std::complex<T>*>(self_cont.const_data_ptr()),
+      k,
+      reinterpret_cast<const std::complex<T>*>(mat2_cont.const_data_ptr()),
+      n,
+      beta,
+      reinterpret_cast<std::complex<T>*>(out_cont.data_ptr()),
+      n);
+
+  //std::cout << "Out contigous: " << out_cont << std::endl;
+  //std::cout << "Out after: " << out << std::endl;
+
+  if (!out.is_same(out_cont)) {
+        out.copy_(out_cont);
+  }
+
+  return out;
+}
+
+at::Tensor& mm_complex_out_xpu(
+    const at::Tensor& self,
+    const at::Tensor& mat2,
+    at::Tensor& out) {
+  at::Tensor out_ref = at::mm(self.cpu(), mat2.cpu());
+
+  //std::cout << "Self contiguous: " << self.is_contiguous(at::MemoryFormat::Contiguous) << std::endl;
+  //std::cout << "mat2 contiguous: " << mat2.is_contiguous(at::MemoryFormat::Contiguous) << std::endl;
+  //std::cout << "out contiguous: " << out.is_contiguous(at::MemoryFormat::Contiguous) << std::endl;
+  //std::cout << "Out strides: " << out.strides() << std::endl;
+  //std::cout << "Self: " << self << " - " << self.strides() << std::endl;
+  //std::cout << "Mat2: " << mat2 << " - " << mat2.strides() << std::endl;
+  //std::cout << "Reference: " << out_ref << std::endl;
+
+  AT_DISPATCH_COMPLEX_TYPES(self.scalar_type(), "mm_complex_out_xpu", [&] {
+    using underlying_t = typename c10::scalar_value_type<scalar_t>::type;
+    mm_complex_out_xpu_impl<underlying_t>(self, mat2, out);
+  });
+
+  //std::cout << "Output: " << out << std::endl;
+  
+  //std::cout << "Diff: " << out.cpu() - out_ref << std::endl;
+  
+  return out;
+}
+
+template<typename T>
+at::Tensor& bmm_complex_out_xpu_impl(
+    const at::Tensor& self,
+    const at::Tensor& batch2,
+    at::Tensor& out) {
+  at::Tensor self_cont = resolveViewsAndConjugation(self);
+  at::Tensor batch2_cont = resolveViewsAndConjugation(batch2);
+  at::Tensor out_cont = resolveViewsAndConjugation(out);
+
+  const int64_t batch_size = self_cont.sizes().at(0);
+  const int64_t m = self_cont.sizes().at(1);
+  const int64_t n = batch2_cont.sizes().at(2);
+  const int64_t k = self_cont.sizes().at(2);
+
+  constexpr std::complex<T> alpha = {T(1.0f), T(0.0f)};
+  constexpr std::complex<T> beta = {T(0.0f), T(0.0f)};
+
+  oneapi::mkl::blas::row_major::gemm_batch(
+      c10::xpu::getCurrentXPUStream().queue(),
+      oneapi::mkl::transpose::nontrans,
+      oneapi::mkl::transpose::nontrans,
+      m,
+      n,
+      k,
+      alpha,
+      reinterpret_cast<const std::complex<T>*>(self_cont.const_data_ptr()),
+      k,
+      m*k,
+      reinterpret_cast<const std::complex<T>*>(batch2_cont.const_data_ptr()),
+      n,
+      k*n,
+      beta,
+      reinterpret_cast<std::complex<T>*>(out_cont.data_ptr()),
+      n,
+      m*n,
+      batch_size);
+
+  if (!out.is_same(out_cont)) {
+        out.copy_(out_cont);
+  }
+
+  return out;
+}
+
+at::Tensor& bmm_complex_out_xpu(
+    const at::Tensor& self,
+    const at::Tensor& mat2,
+    at::Tensor& out) {
+  //out = at::bmm(self.cpu(), mat2.cpu()).to("xpu");
+  
+  AT_DISPATCH_COMPLEX_TYPES(self.scalar_type(), "bmm_complex_out_xpu", [&] {
+    using underlying_t = typename c10::scalar_value_type<scalar_t>::type;
+    bmm_complex_out_xpu_impl<underlying_t>(self, mat2, out);
+  });
+  
+  return out;
+}
+
+template<typename T>
+at::Tensor& addmm_complex_out_xpu_impl(
+    const Tensor& input,
+    const Tensor& mat1,
+    const Tensor& mat2,
+    const Scalar& beta,
+    const Scalar& alpha,
+    Tensor& result) {
+  at::Tensor mat1_cont = resolveViewsAndConjugation(mat1);
+  at::Tensor mat2_cont = resolveViewsAndConjugation(mat2);
+  at::Tensor input_cont = resolveViewsAndConjugation(input).clone().detach();
+
+  const int64_t m = mat1_cont.sizes().at(0);
+  const int64_t n = mat2_cont.sizes().at(1);
+  const int64_t k = mat1_cont.sizes().at(1);
+
+  //std::cout << "m: " << m << ", ";
+  //std::cout << "n: " << n << ", ";
+  //std::cout << "k: " << k << ", " << std::endl;
+
+  std::complex<T> complex_alpha = static_cast<std::complex<T>>(alpha.toComplexDouble());
+  std::complex<T> complex_beta = static_cast<std::complex<T>>(beta.toComplexDouble());
+
+  oneapi::mkl::blas::row_major::gemm(
+      c10::xpu::getCurrentXPUStream().queue(),
+      oneapi::mkl::transpose::nontrans,
+      oneapi::mkl::transpose::nontrans,
+      m,
+      n,
+      k,
+      complex_alpha,
+      reinterpret_cast<const std::complex<T>*>(mat1_cont.const_data_ptr()),
+      k,
+      reinterpret_cast<const std::complex<T>*>(mat2_cont.const_data_ptr()),
+      n,
+      complex_beta,
+      reinterpret_cast<std::complex<T>*>(input_cont.data_ptr()),
+      n);
+  
+  //std::cout << "Here" << std::endl;
+  //std::cout << "input count:" << input_cont.sizes() << std::endl;
+  //std::cout << "result: " << result.sizes() << std::endl;
+  result.view({-1}).copy_(input_cont.view({-1}));
+
+  return result;
+}
+
+at::Tensor& addmm_complex_out_xpu(
+    const Tensor& input,
+    const Tensor& mat1,
+    const Tensor& mat2,
+    const Scalar& beta,
+    const Scalar& alpha,
+    Tensor& result) {
+  //at::Tensor result_cpu = at::addmm(input.cpu(), mat1.cpu(), mat2.cpu(), alpha, beta);
+  
+  AT_DISPATCH_COMPLEX_TYPES(input.scalar_type(), "addmm_complex_out_xpu", [&] {
+    using underlying_t = typename c10::scalar_value_type<scalar_t>::type;
+    addmm_complex_out_xpu_impl<underlying_t>(input, mat1, mat2, beta, alpha, result);
+  });
+  
+  //std::cout << "reference: " << result_cpu << std::endl;
+  //std::cout << "result: " << result << std::endl;
+  //std::cout << "Diff cpu: " << result_cpu - result.cpu() << std::endl;
+
+
+  return result;
+}
+
+template<typename T>
+at::Tensor& baddbmm_complex_out_xpu_impl(
+    const Tensor& input,
+    const Tensor& batch1,
+    const Tensor& batch2,
+    const Scalar& beta,
+    const Scalar& alpha,
+    Tensor& result) {
+  at::Tensor batch1_cont = resolveViewsAndConjugation(batch1);
+  at::Tensor batch2_cont = resolveViewsAndConjugation(batch2);
+  at::Tensor input_cont = resolveViewsAndConjugation(input).clone().detach();
+
+  //std::cout << "Input: " << input.sizes() << std::endl;
+  //std::cout << "batch1: " << batch1.sizes() << std::endl;
+  //std::cout << "batch2: " << batch2.sizes() << std::endl;
+  //std::cout << "result: " << result.sizes() << std::endl;
+
+  const int64_t batch_size = batch1_cont.sizes().at(0);
+  const int64_t m = batch1_cont.sizes().at(1);
+  const int64_t n = batch2_cont.sizes().at(2);
+  const int64_t k = batch1_cont.sizes().at(2);
+
+  //std::cout << "Batch size: " << batch_size << ", ";
+  //std::cout << "m: " << m << ", ";
+  //std::cout << "n: " << n << ", ";
+  //std::cout << "k: " << k << ", " << std::endl;
+
+  std::complex<T> complex_alpha = static_cast<std::complex<T>>(alpha.toComplexDouble());
+  std::complex<T> complex_beta = static_cast<std::complex<T>>(beta.toComplexDouble());
+
+  oneapi::mkl::blas::row_major::gemm_batch(
+      c10::xpu::getCurrentXPUStream().queue(),
+      oneapi::mkl::transpose::nontrans,
+      oneapi::mkl::transpose::nontrans,
+      m,
+      n,
+      k,
+      complex_alpha,
+      reinterpret_cast<const std::complex<T>*>(batch1_cont.const_data_ptr()),
+      k,
+      m*k,
+      reinterpret_cast<const std::complex<T>*>(batch2_cont.const_data_ptr()),
+      n,
+      k*n,
+      complex_beta,
+      reinterpret_cast<std::complex<T>*>(input_cont.data_ptr()),
+      n,
+      m*n,
+      batch_size);
+  
+  result.view({-1}).copy_(input_cont.view({-1}));
+
+  return result;
+}
+
+at::Tensor& baddbmm_complex_out_xpu(
+    const Tensor& input,
+    const Tensor& batch1,
+    const Tensor& batch2,
+    const Scalar& beta,
+    const Scalar& alpha,
+    Tensor& result) {
+  //at::Tensor result_cpu = at::baddbmm(input.cpu(), batch1.cpu(), batch2.cpu(), alpha, beta).to("xpu");
+  
+  AT_DISPATCH_COMPLEX_TYPES(input.scalar_type(), "baddbmm_complex_out_xpu", [&] {
+    using underlying_t = typename c10::scalar_value_type<scalar_t>::type;
+    baddbmm_complex_out_xpu_impl<underlying_t>(input, batch1, batch2, beta, alpha, result);
+  });
+
+  //std::cout << "reference: " << result_cpu << std::endl;
+  //std::cout << "result: " << result << std::endl;
+  //std::cout << "Diff cpu: " << result_cpu - result.cpu() << std::endl;
+  
+  return result;
+}
+
+REGISTER_XPU_DISPATCH(mm_complex_stub, &mm_complex_out_xpu)
+REGISTER_XPU_DISPATCH(bmm_complex_stub, &bmm_complex_out_xpu)
+REGISTER_XPU_DISPATCH(addmm_complex_stub, &addmm_complex_out_xpu)
+REGISTER_XPU_DISPATCH(baddbmm_complex_stub, &baddbmm_complex_out_xpu)
 
 DEFINE_DISPATCH(mm_complex_stub);
 DEFINE_DISPATCH(bmm_complex_stub);
