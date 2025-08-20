@@ -4546,6 +4546,21 @@ class TestCudaMallocAsync(TestCase):
         reg_mem = torch.cuda.memory_stats()[key_allocated]
         self.assertEqual(reg_mem - start_mem, nbytes)
 
+        device = torch._C._cuda_getDevice()
+        torch.cuda.memory._set_allocator_settings("per_process_memory_fraction:0.5")
+        self.assertEqual(torch.cuda.memory.get_per_process_memory_fraction(device), 0.5)
+
+        torch.cuda.memory._set_allocator_settings("")
+        self.assertEqual(torch.cuda.memory.get_per_process_memory_fraction(device), 1.0)
+
+        with self.assertRaises(ValueError):
+            torch.cuda.memory._set_allocator_settings(
+                "per_process_memory_fraction:-0.1"
+            )
+
+        with self.assertRaises(ValueError):
+            torch.cuda.memory._set_allocator_settings("per_process_memory_fraction:1.1")
+
         with self.assertRaises(RuntimeError):
             torch.cuda.memory._set_allocator_settings("foo:1,bar:2")
 
