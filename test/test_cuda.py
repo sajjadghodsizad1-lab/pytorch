@@ -4546,21 +4546,6 @@ class TestCudaMallocAsync(TestCase):
         reg_mem = torch.cuda.memory_stats()[key_allocated]
         self.assertEqual(reg_mem - start_mem, nbytes)
 
-        device = torch._C._cuda_getDevice()
-        torch.cuda.memory._set_allocator_settings("per_process_memory_fraction:0.5")
-        self.assertEqual(torch.cuda.memory.get_per_process_memory_fraction(device), 0.5)
-
-        torch.cuda.memory._set_allocator_settings("")
-        self.assertEqual(torch.cuda.memory.get_per_process_memory_fraction(device), 1.0)
-
-        with self.assertRaises(ValueError):
-            torch.cuda.memory._set_allocator_settings(
-                "per_process_memory_fraction:-0.1"
-            )
-
-        with self.assertRaises(ValueError):
-            torch.cuda.memory._set_allocator_settings("per_process_memory_fraction:1.1")
-
         with self.assertRaises(RuntimeError):
             torch.cuda.memory._set_allocator_settings("foo:1,bar:2")
 
@@ -4589,6 +4574,52 @@ class TestCudaMallocAsync(TestCase):
             torch.cuda.memory._set_allocator_settings(
                 "pinned_num_register_threads:1024"
             )
+
+    def test_allocator_memory_fraction_setting(self):
+        def make_env(fraction):
+            env = os.environ.copy()
+            var = "PYTORCH_ALLOC_CONF"
+            key = "per_process_memory_fraction"
+            value = [
+                x
+                for x in env.get(var, "").split(",")
+                if len(x) > 0 and not x.startswith(f"{key}:")
+            ]
+            value.append(f"{key}:{fraction}")
+            env[var] = ",".join(value)
+            return env
+
+        def run_test(value):
+            test_script = """\
+import os
+import torch
+device = torch._C._cuda_getDevice()
+value = torch.cuda.memory.get_per_process_memory_fraction(device)
+print(value, end="")
+            """
+            return subprocess.run(
+                [sys.executable, "-c", test_script],
+                env=make_env(value),
+                text=True,
+                check=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(run_test(0.0).stdout, "0.0")
+        self.assertEqual(run_test(0.5).stdout, "0.5")
+        self.assertEqual(run_test(1.0).stdout, "1.0")
+
+        with self.assertRaises(subprocess.CalledProcessError) as e:
+            run_test(-0.1)
+        assert "per_process_memory_fraction is invalid" in e.exception.stderr, (
+            e.exception.stderr
+        )
+
+        with self.assertRaises(subprocess.CalledProcessError) as e:
+            run_test(1.1)
+        assert "per_process_memory_fraction is invalid" in e.exception.stderr, (
+            e.exception.stderr
+        )
 
     def test_cachingAllocator_raw_alloc(self):
         # Test that raw_alloc respects the setting that
