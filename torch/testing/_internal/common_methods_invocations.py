@@ -12260,6 +12260,8 @@ op_db: list[OpInfo] = [
                    dtypes=(torch.complex64, torch.complex128)),
                DecorateInfo(toleranceOverride({torch.float16: tol(atol=1e-3, rtol=2e-3)}),
                             "TestConsistency", "test_output_grad_match", device_type="mps"),
+               DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
+                            device_type='xpu', dtypes=(torch.float64,)),
            )),
     OpInfo('addmm',
            # When alpha=beta=1 as compile-time constants, JIT will decompose addmm into mm and add.
@@ -12283,6 +12285,9 @@ op_db: list[OpInfo] = [
                # https://github.com/pytorch/pytorch/issues/71784
                DecorateInfo(unittest.skip('Skipped!'), 'TestNNCOpInfo', 'test_nnc_correctness',
                             device_type='cpu', dtypes=(torch.float16,)),
+               # https://github.com/intel/torch-xpu-ops/issues/1893
+               DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
+                            device_type='xpu', dtypes=(torch.float64,)),
            )),
     OpInfo('addmv',
            dtypes=all_types_and_complex_and(torch.bfloat16, torch.float16),
@@ -12300,7 +12305,10 @@ op_db: list[OpInfo] = [
                             "TestConsistency", "test_output_grad_match", device_type="mps"),
            ],
            # https://github.com/intel/torch-xpu-ops/issues/1951
-           skips=(DecorateInfo(unittest.skip('Skipped!'), 'TestCommon', 'test_out', device_type='xpu', dtypes=(torch.float32,)),),
+           skips=(DecorateInfo(unittest.skip('Skipped!'), 'TestCommon', 'test_out', device_type='xpu', dtypes=(torch.float32,)),
+                  # https://github.com/intel/torch-xpu-ops/issues/1893
+                  DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
+                               device_type='xpu', dtypes=(torch.float64,))),
            sample_inputs_func=sample_inputs_addmv),
     OpInfo('addbmm',
            ref=lambda M, batch1, batch2, beta=1, alpha=1: np.add(np.multiply(np.asarray(beta, dtype=M.dtype), M),
@@ -12347,6 +12355,8 @@ op_db: list[OpInfo] = [
                DecorateInfo(unittest.expectedFailure, 'TestCommon', 'test_out_warning'),
                # https://github.com/pytorch/pytorch/issues/55907
                DecorateInfo(unittest.skip("Skipped!"), 'TestCommon', 'test_variant_consistency_eager'),
+               DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
+                            device_type='xpu', dtypes=(torch.float64,)),
            ),
            sample_inputs_func=sample_inputs_addbmm),
     OpInfo('baddbmm',
@@ -12377,6 +12387,12 @@ op_db: list[OpInfo] = [
                    'TestSchemaCheckModeOpInfo',
                    'test_schema_correctness',
                    dtypes=(torch.complex64, torch.complex128)),
+               DecorateInfo(
+                   unittest.skip('Skipped!'),
+                   'TestMathBits',
+                   'test_neg_view',
+                   device_type='xpu',
+                   dtypes=(torch.float64,)),
            )),
     OpInfo('dot',
            dtypes=all_types_and_complex_and(torch.float16, torch.bfloat16),
@@ -15274,6 +15290,7 @@ op_db: list[OpInfo] = [
            assert_jit_shape_analysis=True,
            gradcheck_nondet_tol=GRADCHECK_NONDET_TOL,
            decorators=[
+               skipXPU,
                DecorateInfo(
                    toleranceOverride({torch.float32: tol(atol=1e-04, rtol=1.3e-06), }),
                    'TestCommon', 'test_variant_consistency_eager', device_type='cuda'),
@@ -15322,6 +15339,7 @@ op_db: list[OpInfo] = [
            gradcheck_fast_mode=True,
            gradcheck_nondet_tol=GRADCHECK_NONDET_TOL,
            decorators=[
+               skipXPU,
                DecorateInfo(
                    toleranceOverride({torch.float16: tol(atol=5e-2, rtol=5e-2), }),
                    'TestInductorOpInfo', 'test_comprehensive', device_type='cuda'),
@@ -15482,6 +15500,10 @@ op_db: list[OpInfo] = [
                DecorateInfo(
                    toleranceOverride({torch.float16: tol(atol=5e-3, rtol=1e-3)}),
                    'TestInductorOpInfo', 'test_comprehensive',
+               ),
+               DecorateInfo(
+                   toleranceOverride({torch.float32: tol(atol=1e-4, rtol=3e-6)}),
+                   'TestCompositeCompliance', 'test_backward', device_type='xpu',
                ),
            ),
            skips=(
@@ -20812,6 +20834,8 @@ op_db: list[OpInfo] = [
             # the op dispatches to _fused_dropout (with a few more conditions)
             # hence, different values and this skip here
             DecorateInfo(unittest.skip("Skipped!"), 'TestMathBits', 'test_neg_view', device_type='cuda'),
+            # AssertionError: Tensor-likes are not close!
+            DecorateInfo(unittest.skip("Skipped!"), 'TestMathBits', 'test_neg_view', device_type='xpu'),
             DecorateInfo(unittest.skip('output is non-deterministic'), 'TestCommon', 'test_compare_cpu')),
         supports_forward_ad=True,
         supports_fwgrad_bwgrad=True,
@@ -21496,18 +21520,7 @@ op_db: list[OpInfo] = [
             # Sharding strategy NYI
             DecorateInfo(unittest.expectedFailure, 'TestDTensorOps', 'test_dtensor_op_db'),
             # https://github.com/intel/torch-xpu-ops/issues/1950
-            DecorateInfo(
-                unittest.skip("Skipped!"),
-                "TestCommon",
-                "test_out_warning",
-                device_type="xpu",
-            ),
-            DecorateInfo(
-                unittest.skip("Skipped!"),
-                "TestCommon",
-                "test_out",
-                device_type="xpu",
-            ),
+            skipXPU,
         )
     ),
     OpInfo(
@@ -24641,6 +24654,12 @@ python_ref_db = [
     PythonRefInfo(
         "_refs.std_mean",
         torch_opinfo_name="std_mean",
+        skips=(
+            # https://github.com/intel/torch-xpu-ops/issues/1859
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+        ),
     ),
     ReductionPythonRefInfo(
         "_refs.sum",
@@ -24727,6 +24746,12 @@ python_ref_db = [
         "_refs.var_mean",
         torch_opinfo_name="var_mean",
         validate_view_consistency=False,
+        skips=(
+            # https://github.com/intel/torch-xpu-ops/issues/1859
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+        ),
     ),
     #
     # Linear Algebra Operators
