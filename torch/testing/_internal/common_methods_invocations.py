@@ -24641,6 +24641,12 @@ python_ref_db = [
     PythonRefInfo(
         "_refs.std_mean",
         torch_opinfo_name="std_mean",
+        skips=(
+            # https://github.com/intel/torch-xpu-ops/issues/1859
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+        ),
     ),
     ReductionPythonRefInfo(
         "_refs.sum",
@@ -24727,6 +24733,12 @@ python_ref_db = [
         "_refs.var_mean",
         torch_opinfo_name="var_mean",
         validate_view_consistency=False,
+        skips=(
+            # https://github.com/intel/torch-xpu-ops/issues/1859
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+        ),
     ),
     #
     # Linear Algebra Operators
