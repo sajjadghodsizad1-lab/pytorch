@@ -1487,6 +1487,11 @@ class ScaledMMConfigMixin(MMTemplateConfigMixin):
 
             return False
 
+        def is_scalar_like(sz: Any) -> bool:
+            return (len(sz) == 0) or all(
+                V.graph.sizevars.statically_known_equals(d, 1) for d in sz
+            )
+
         size_a, size_b = scale_a.get_size(), scale_b.get_size()
         assert are_compatible_scales(size_a, size_b), (
             "Expect scale_a and scale_b to be either both scalars (including single-element tensors) "
@@ -1500,8 +1505,9 @@ class ScaledMMConfigMixin(MMTemplateConfigMixin):
             # Add scaled MM-specific options (moved from mm_common.scaled_mm_options)
             # Override accumulator type for scaled MM
             template_kwargs["ACC_TYPE"] = "tl.float32"
-            # Add SCALING_ROWWISE attribute based on scale_a tensor shape
-            template_kwargs["SCALING_ROWWISE"] = len(size_a) == 2
+            # Add SCALING_ROWWISE attribute based on scale tensor shapes
+            both_scalar_like = is_scalar_like(size_a) and is_scalar_like(size_b)
+            template_kwargs["SCALING_ROWWISE"] = not both_scalar_like
 
             yield template_kwargs
 
@@ -1590,11 +1596,12 @@ class CUDAScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, CUDAConfigHeurist
         super().__init__()
         # Override mm_configs to use scaled_mm_configs
         self.mm_configs = self.scaled_mm_configs
-        # NOTE: overriding exhaustive configs here to be the same as mm_configs
-        # as we haven't validated exhaustive support here yet
-        # TODO(coconutruben): remove this once we have validated exhaustive support
-        # for scaled_mm
-        self.exhaustive_configs = self.scaled_mm_configs
+
+    def _filter_configs(self, configs: list[BaseConfig]) -> list[BaseConfig]:
+        # CUDAScaledMMTemplateConfigHeuristic requires block_m >= 16, block_n >= 16, and block_k >= 32
+        # Default exhaustive autotuning includes configs with block_k = 16
+        configs = [c for c in configs if getattr(c, "block_k", None) is not None and c.block_k >= 32]
+        return super()._filter_configs(configs)
 
 
 # TODO(coconutruben): replace with template.name once templates are importable
