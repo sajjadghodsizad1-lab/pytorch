@@ -24656,6 +24656,12 @@ python_ref_db = [
             DecorateInfo(
                 unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
                 dtypes=[torch.float64, torch.complex128,]),
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_torch_fallback', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_executor', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
         ),
     ),
     ReductionPythonRefInfo(
@@ -24747,6 +24753,9 @@ python_ref_db = [
             # https://github.com/intel/torch-xpu-ops/issues/1859
             DecorateInfo(
                 unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_torch_fallback', device_type='xpu',
                 dtypes=[torch.float64, torch.complex128,]),
             DecorateInfo(
                 unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_executor', device_type='xpu',
