@@ -26,6 +26,7 @@ from torch.testing._internal.common_device_type import (
     deviceCountAtLeast,
     instantiate_device_type_tests,
     onlyCPU,
+    onlyCUDA,
     onlyNativeDeviceTypesAnd,
     onlyOn,
     OpDTypes,
@@ -1820,7 +1821,6 @@ class TestCompositeCompliance(TestCase):
                 op.get_op(), args, kwargs, op.gradcheck_wrapper, self.assertEqual
             )
 
-    @skipXPU
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_cow_input(self, device, dtype, op):
         samples = op.sample_inputs(device, dtype, requires_grad=op.supports_autograd)
@@ -2157,7 +2157,6 @@ class TestMathBits(TestCase):
 
                         self.assertEqual(tensor.grad, cloned1_tensor.grad)
 
-    @skipXPU
     @ops(ops_and_refs, allowed_dtypes=(torch.cfloat,))
     def test_conj_view(self, device, dtype, op):
         if not op.test_conjugated_samples:
@@ -2199,7 +2198,6 @@ class TestMathBits(TestCase):
             lambda x: True,
         )
 
-    @skipXPU
     @ops(ops_and_refs, allowed_dtypes=(torch.cdouble,))
     def test_neg_conj_view(self, device, dtype, op):
         if not op.test_neg_view:
@@ -2826,7 +2824,7 @@ class TestFakeTensor(TestCase):
             except torch._subclasses.fake_tensor.UnsupportedOperatorException:
                 pass
 
-    @onlyOn(["cuda", "xpu"])
+    @onlyCUDA
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     @skipOps(
         "TestFakeTensor", "test_fake_crossref_backward_no_amp", fake_backward_xfails
@@ -2834,7 +2832,7 @@ class TestFakeTensor(TestCase):
     def test_fake_crossref_backward_no_amp(self, device, dtype, op):
         self._test_fake_crossref_helper(device, dtype, op, contextlib.nullcontext)
 
-    @onlyOn(["cuda", "xpu"])
+    @onlyCUDA
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     @skipOps(
         "TestFakeTensor",
@@ -2855,10 +2853,10 @@ class TestFakeTensor(TestCase):
 
 
 instantiate_device_type_tests(TestCommon, globals(), allow_xpu=True)
-instantiate_device_type_tests(TestCompositeCompliance, globals(), allow_xpu=True)
-instantiate_device_type_tests(TestMathBits, globals(), allow_xpu=True)
+instantiate_device_type_tests(TestCompositeCompliance, globals())
+instantiate_device_type_tests(TestMathBits, globals())
 instantiate_device_type_tests(TestRefsOpsInfo, globals(), only_for="cpu")
-instantiate_device_type_tests(TestFakeTensor, globals(), allow_xpu=True)
+instantiate_device_type_tests(TestFakeTensor, globals())
 instantiate_device_type_tests(TestTags, globals())
 
 if __name__ == "__main__":

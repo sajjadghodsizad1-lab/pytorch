@@ -12260,8 +12260,6 @@ op_db: list[OpInfo] = [
                    dtypes=(torch.complex64, torch.complex128)),
                DecorateInfo(toleranceOverride({torch.float16: tol(atol=1e-3, rtol=2e-3)}),
                             "TestConsistency", "test_output_grad_match", device_type="mps"),
-               DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
-                            device_type='xpu', dtypes=(torch.float64,)),
            )),
     OpInfo('addmm',
            # When alpha=beta=1 as compile-time constants, JIT will decompose addmm into mm and add.
@@ -12285,9 +12283,6 @@ op_db: list[OpInfo] = [
                # https://github.com/pytorch/pytorch/issues/71784
                DecorateInfo(unittest.skip('Skipped!'), 'TestNNCOpInfo', 'test_nnc_correctness',
                             device_type='cpu', dtypes=(torch.float16,)),
-               # https://github.com/intel/torch-xpu-ops/issues/1893
-               DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
-                            device_type='xpu', dtypes=(torch.float64,)),
            )),
     OpInfo('addmv',
            dtypes=all_types_and_complex_and(torch.bfloat16, torch.float16),
@@ -12305,10 +12300,7 @@ op_db: list[OpInfo] = [
                             "TestConsistency", "test_output_grad_match", device_type="mps"),
            ],
            # https://github.com/intel/torch-xpu-ops/issues/1951
-           skips=(DecorateInfo(unittest.skip('Skipped!'), 'TestCommon', 'test_out', device_type='xpu', dtypes=(torch.float32,)),
-                  # https://github.com/intel/torch-xpu-ops/issues/1893
-                  DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
-                               device_type='xpu', dtypes=(torch.float64,))),
+           skips=(DecorateInfo(unittest.skip('Skipped!'), 'TestCommon', 'test_out', device_type='xpu', dtypes=(torch.float32,)),),
            sample_inputs_func=sample_inputs_addmv),
     OpInfo('addbmm',
            ref=lambda M, batch1, batch2, beta=1, alpha=1: np.add(np.multiply(np.asarray(beta, dtype=M.dtype), M),
@@ -12355,8 +12347,6 @@ op_db: list[OpInfo] = [
                DecorateInfo(unittest.expectedFailure, 'TestCommon', 'test_out_warning'),
                # https://github.com/pytorch/pytorch/issues/55907
                DecorateInfo(unittest.skip("Skipped!"), 'TestCommon', 'test_variant_consistency_eager'),
-               DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view',
-                            device_type='xpu', dtypes=(torch.float64,)),
            ),
            sample_inputs_func=sample_inputs_addbmm),
     OpInfo('baddbmm',
@@ -12387,12 +12377,6 @@ op_db: list[OpInfo] = [
                    'TestSchemaCheckModeOpInfo',
                    'test_schema_correctness',
                    dtypes=(torch.complex64, torch.complex128)),
-               DecorateInfo(
-                   unittest.skip('Skipped!'),
-                   'TestMathBits',
-                   'test_neg_view',
-                   device_type='xpu',
-                   dtypes=(torch.float64,)),
            )),
     OpInfo('dot',
            dtypes=all_types_and_complex_and(torch.float16, torch.bfloat16),
@@ -15290,7 +15274,6 @@ op_db: list[OpInfo] = [
            assert_jit_shape_analysis=True,
            gradcheck_nondet_tol=GRADCHECK_NONDET_TOL,
            decorators=[
-               skipXPU,
                DecorateInfo(
                    toleranceOverride({torch.float32: tol(atol=1e-04, rtol=1.3e-06), }),
                    'TestCommon', 'test_variant_consistency_eager', device_type='cuda'),
@@ -15341,7 +15324,6 @@ op_db: list[OpInfo] = [
            gradcheck_fast_mode=True,
            gradcheck_nondet_tol=GRADCHECK_NONDET_TOL,
            decorators=[
-               skipXPU,
                DecorateInfo(
                    toleranceOverride({torch.float16: tol(atol=5e-2, rtol=5e-2), }),
                    'TestInductorOpInfo', 'test_comprehensive', device_type='cuda'),
@@ -15504,10 +15486,6 @@ op_db: list[OpInfo] = [
                DecorateInfo(
                    toleranceOverride({torch.float16: tol(atol=5e-3, rtol=1e-3)}),
                    'TestInductorOpInfo', 'test_comprehensive',
-               ),
-               DecorateInfo(
-                   toleranceOverride({torch.float32: tol(atol=1e-4, rtol=3e-6)}),
-                   'TestCompositeCompliance', 'test_backward', device_type='xpu',
                ),
            ),
            skips=(
@@ -16254,11 +16232,6 @@ op_db: list[OpInfo] = [
                # NVIDIA only assures that bfloat16 is supported by bmm if SM >= 5.3
                DecorateInfo(unittest.skip("Skipped!"), 'TestCommon', 'test_dtypes', device_type='cuda', active_if=not SM53OrLater),
                DecorateInfo(unittest.skip("Skipped!"), 'TestNNCOpInfo', 'test_nnc_correctness', dtypes=(torch.bfloat16,)),
-               # https://github.com/intel/torch-xpu-ops/issues/1963
-               DecorateInfo(unittest.skip("Skipped!"), 'TestFakeTensor', 'test_fake_crossref_backward_amp',
-                            device_type='xpu', dtypes=[torch.float32]),
-               DecorateInfo(unittest.skip("Skipped!"), 'TestFakeTensor', 'test_fake_crossref_backward_no_amp',
-                            device_type='xpu', dtypeAs=[torch.float32]),
            ),
            # Runs very slowly on slow gradcheck - alternatively reduce input sizes
            gradcheck_fast_mode=True,
@@ -18607,9 +18580,6 @@ op_db: list[OpInfo] = [
                             device_type='mps', dtypes=[torch.float32]),
                DecorateInfo(unittest.skip("Skipped!"), 'TestJit', 'test_variant_consistency_jit',
                             device_type='mps', dtypes=[torch.float32]),
-               # https://github.com/intel/torch-xpu-ops/issues/1963
-               DecorateInfo(unittest.skip("Skipped!"), 'TestFakeTensor', 'test_fake_autocast',
-                            device_type='xpu', dtypes=[torch.float32]),
            )),
     OpInfo('gather',
            dtypes=all_types_and_complex_and(torch.bool, torch.float16, torch.bfloat16),
@@ -19558,10 +19528,7 @@ op_db: list[OpInfo] = [
                DecorateInfo(unittest.skip("Skipped!"), 'TestDecomp', 'test_quick'),
                # AssertionError in CUDA variant
                DecorateInfo(unittest.skip("Skipped!"), 'TestFakeTensor', device_type='cuda'),
-               DecorateInfo(unittest.skip("Skipped!"), 'TestDeviceUtils', 'test_device_mode_ops'),
-               # https://github.com/intel/torch-xpu-ops/issues/1964
-               DecorateInfo(unittest.skip("Skipped!"), 'TestFakeTensor', device_type='xpu'))),
-
+               DecorateInfo(unittest.skip("Skipped!"), 'TestDeviceUtils', 'test_device_mode_ops'))),
     OpInfo('bernoulli',
            op=lambda inp, *args, **kwargs:
                wrapper_set_seed(torch.bernoulli, inp, *args, **kwargs),
@@ -20293,9 +20260,6 @@ op_db: list[OpInfo] = [
                # Compiler issue on ROCm. Might need to skip until ROCm5.5
                DecorateInfo(unittest.skip("Skipped!"), 'TestCommon', 'test_non_standard_bool_values',
                             dtypes=[torch.bool], active_if=TEST_WITH_ROCM),
-               # https://github.com/intel/torch-xpu-ops/issues/1962
-               DecorateInfo(unittest.skip("Skipped!"), 'TestFakeTensor', 'test_fake_crossref_backward_no_amp',
-                            device_type='xpu'),
            )
            ),
     OpInfo('logcumsumexp',
@@ -20852,8 +20816,6 @@ op_db: list[OpInfo] = [
             # the op dispatches to _fused_dropout (with a few more conditions)
             # hence, different values and this skip here
             DecorateInfo(unittest.skip("Skipped!"), 'TestMathBits', 'test_neg_view', device_type='cuda'),
-            # AssertionError: Tensor-likes are not close!
-            DecorateInfo(unittest.skip("Skipped!"), 'TestMathBits', 'test_neg_view', device_type='xpu'),
             DecorateInfo(unittest.skip('output is non-deterministic'), 'TestCommon', 'test_compare_cpu')),
         supports_forward_ad=True,
         supports_fwgrad_bwgrad=True,
@@ -21538,7 +21500,24 @@ op_db: list[OpInfo] = [
             # Sharding strategy NYI
             DecorateInfo(unittest.expectedFailure, 'TestDTensorOps', 'test_dtensor_op_db'),
             # https://github.com/intel/torch-xpu-ops/issues/1950
-            skipXPU,
+            DecorateInfo(
+                unittest.skip("Skipped!"),
+                "TestCommon",
+                "test_out_warning",
+                device_type="xpu",
+            ),
+            DecorateInfo(
+                unittest.skip("Skipped!"),
+                "TestCommon",
+                "test_out",
+                device_type="xpu",
+            ),
+            DecorateInfo(
+                unittest.skip("Skipped!"),
+                "TestCommon",
+                "test_non_standard_bool_values",
+                device_type="xpu",
+            ),
         )
     ),
     OpInfo(
@@ -24677,6 +24656,12 @@ python_ref_db = [
             DecorateInfo(
                 unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
                 dtypes=[torch.float64, torch.complex128,]),
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_torch_fallback', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_executor', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
         ),
     ),
     ReductionPythonRefInfo(
@@ -24768,6 +24753,9 @@ python_ref_db = [
             # https://github.com/intel/torch-xpu-ops/issues/1859
             DecorateInfo(
                 unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref', device_type='xpu',
+                dtypes=[torch.float64, torch.complex128,]),
+            DecorateInfo(
+                unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_torch_fallback', device_type='xpu',
                 dtypes=[torch.float64, torch.complex128,]),
             DecorateInfo(
                 unittest.skip("Skipped!"), 'TestCommon', 'test_python_ref_executor', device_type='xpu',
