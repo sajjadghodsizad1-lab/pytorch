@@ -35,6 +35,12 @@ BFLOAT16_AVAILABLE = ( torch.cuda.is_available() or torch.xpu.is_available() ) a
     torch.version.cuda is not None or torch.version.hip is not None or torch.version.xpu is not None
 )
 
+# bfloat16 is only supported by CUDA 11+ or XPU
+BFLOAT16_AVAILABLE = (
+    torch.cuda.is_available()
+    and (torch.version.cuda is not None or torch.version.hip is not None)
+) or torch.xpu.is_available()
+
 
 class Net(nn.Module):
     def __init__(self, has_wrapping, sharding_strategy, mixed_precision=None):
