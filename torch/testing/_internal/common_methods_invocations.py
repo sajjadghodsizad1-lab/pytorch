@@ -15818,6 +15818,10 @@ op_db: list[OpInfo] = [
                DecorateInfo(unittest.expectedFailure, 'TestJit', 'test_variant_consistency_jit'),
                # https://github.com/intel/torch-xpu-ops/issues/1962
                DecorateInfo(unittest.skip('Skipped!'), 'TestMathBits', 'test_neg_view', device_type='xpu', dtypes=(torch.float64,)),
+               DecorateInfo(unittest.skip('Skipped!'), 'TestFakeTensor', 'test_fake_crossref_backward_amp',
+                            device_type='xpu', dtypes=(torch.float32,)),
+               DecorateInfo(unittest.skip('Skipped!'), 'TestFakeTensor', 'test_fake_crossref_backward_no_amp',
+                            device_type='xpu', dtypes=(torch.float32,)),
            ),
            supports_out=False),
     OpInfo('nn.functional.interpolate',
