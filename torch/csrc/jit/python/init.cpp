@@ -1959,15 +1959,31 @@ void initJITBindings(PyObject* module) {
            bool,
            bool>())
       .def_property_readonly(
-          "name", [](const FunctionSchema& self) { return self.name(); })
+          "name",
+          // NOTE[decltype(auto) lambdas]: lambdas with no declared
+          // return type act like they return `auto`, not
+          // `decltype(auto)`, so simple wrapper lambdas like these
+          // will force copies if the thing they're returning is a
+          // reference. See https://godbolt.org/z/daG7x4xKc for a
+          // demonstration.
+          [](const FunctionSchema& self) -> decltype(auto) {
+            return self.name();
+          })
       .def_property_readonly(
           "overload_name",
-          [](const FunctionSchema& self) { return self.overload_name(); })
+          [](const FunctionSchema& self) -> decltype(auto) {
+            return self.overload_name();
+          })
       .def_property_readonly(
           "arguments",
-          [](const FunctionSchema& self) { return self.arguments(); })
+          [](const FunctionSchema& self) -> decltype(auto) {
+            return self.arguments();
+          })
       .def_property_readonly(
-          "returns", [](const FunctionSchema& self) { return self.returns(); })
+          "returns",
+          [](const FunctionSchema& self) -> decltype(auto) {
+            return self.returns();
+          })
       .def(
           "is_backward_compatible_with",
           [](const FunctionSchema& self, const FunctionSchema& old_schema) {
@@ -2025,11 +2041,17 @@ void initJITBindings(PyObject* module) {
            bool,
            std::optional<AliasInfo>>())
       .def_property_readonly(
-          "name", [](const Argument& self) { return self.name(); })
+          "name",
+          // See NOTE[decltype(auto) lambdas] above.
+          [](const Argument& self) -> decltype(auto) { return self.name(); })
       .def_property_readonly(
-          "type", [](const Argument& self) { return self.type(); })
+          "type",
+          [](const Argument& self) -> decltype(auto) { return self.type(); })
       .def_property_readonly(
-          "real_type", [](const Argument& self) { return self.real_type(); })
+          "real_type",
+          [](const Argument& self) -> decltype(auto) {
+            return self.real_type();
+          })
       .def_property_readonly(
           "N",
           [](const Argument& self) -> py::object {
