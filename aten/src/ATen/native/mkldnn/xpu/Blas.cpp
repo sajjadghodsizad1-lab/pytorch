@@ -54,7 +54,7 @@ Tensor& addmm_out(
   // complex case
   if (self.is_complex()) {
     static auto op =
-        c10::Dispatcher::singleton().findSchemaOrThrow("xpu_mkl::addmm", "");
+        c10::Dispatcher::singleton().findSchemaOrThrow("aten::_addmm_mkl", "out");
 
     static auto op_typed =
         op.typed<decltype(addmm_out)>();
@@ -182,7 +182,7 @@ Tensor& mm_out(const Tensor& self, const Tensor& mat2, Tensor& result) {
 
   if (self.is_complex()) {
     static auto op =
-        c10::Dispatcher::singleton().findSchemaOrThrow("xpu_mkl::mm", "");
+        c10::Dispatcher::singleton().findSchemaOrThrow("aten::_mm_mkl", "out");
 
     static auto op_typed =
         op.typed<decltype(mm_out)>();
@@ -235,7 +235,7 @@ Tensor& baddbmm_out(
   // complex case
   if (input.is_complex()) {
     static auto op =
-        c10::Dispatcher::singleton().findSchemaOrThrow("xpu_mkl::baddbmm", "");
+        c10::Dispatcher::singleton().findSchemaOrThrow("aten::_baddbmm_mkl", "out");
 
     static auto op_typed =
         op.typed<decltype(baddbmm_out)>();
@@ -296,7 +296,7 @@ Tensor& bmm_out(const Tensor& self, const Tensor& batch2, Tensor& result) {
   // complex case
   if (self.is_complex()) {
     static auto op =
-        c10::Dispatcher::singleton().findSchemaOrThrow("xpu_mkl::bmm", "");
+        c10::Dispatcher::singleton().findSchemaOrThrow("aten::_bmm_mkl", "out");
 
     static auto op_typed =
         op.typed<decltype(bmm_out)>();
