@@ -1958,21 +1958,13 @@ void initJITBindings(PyObject* module) {
            std::vector<Argument>,
            bool,
            bool>())
-      .def_property_readonly(
-          "name", [](const FunctionSchema& self) { return self.name(); })
-      .def_property_readonly(
-          "overload_name",
-          [](const FunctionSchema& self) { return self.overload_name(); })
-      .def_property_readonly(
-          "arguments",
-          [](const FunctionSchema& self) { return self.arguments(); })
-      .def_property_readonly(
-          "returns", [](const FunctionSchema& self) { return self.returns(); })
+      .def_property_readonly("name", &FunctionSchema::name)
+      .def_property_readonly("overload_name", &FunctionSchema::overload_name)
+      .def_property_readonly("arguments", &FunctionSchema::arguments)
+      .def_property_readonly("returns", &FunctionSchema::returns)
       .def(
           "is_backward_compatible_with",
-          [](const FunctionSchema& self, const FunctionSchema& old_schema) {
-            return self.isBackwardCompatibleWith(old_schema);
-          })
+          &FunctionSchema::isBackwardCompatibleWith)
       .def(
           "check_forward_compatible_with",
           [](const FunctionSchema& self, const FunctionSchema& old_schema) {
@@ -2024,12 +2016,9 @@ void initJITBindings(PyObject* module) {
            std::optional<IValue>,
            bool,
            std::optional<AliasInfo>>())
-      .def_property_readonly(
-          "name", [](const Argument& self) { return self.name(); })
-      .def_property_readonly(
-          "type", [](const Argument& self) { return self.type(); })
-      .def_property_readonly(
-          "real_type", [](const Argument& self) { return self.real_type(); })
+      .def_property_readonly("name", &Argument::name)
+      .def_property_readonly("type", &Argument::type)
+      .def_property_readonly("real_type", &Argument::real_type)
       .def_property_readonly(
           "N",
           [](const Argument& self) -> py::object {
