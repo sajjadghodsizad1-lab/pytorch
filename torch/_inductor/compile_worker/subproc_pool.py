@@ -27,7 +27,7 @@ from torch._inductor.compile_worker.tracked_process_pool import (
     TrackedProcessPoolExecutor,
 )
 from torch._inductor.compile_worker.utils import _async_compile_initializer
-from torch._inductor.utils import get_ld_library_path, python_subprocess_env
+from torch._inductor.utils import get_ld_library_path
 
 
 log = logging.getLogger(__name__)
@@ -162,7 +162,11 @@ class SubprocPool:
         self.process = subprocess.Popen(
             cmd,
             env={
-                **python_subprocess_env(),
+                **os.environ,
+                # We need to set the PYTHONPATH so the subprocess can find torch.
+                "PYTHONPATH": os.environ.get(
+                    "TORCH_CUSTOM_PYTHONPATH", os.pathsep.join(sys.path)
+                ),
                 # Safeguard against creating a SubprocPool in the subprocess.
                 "TORCH_WARM_POOL": "0",
                 # Some internal usages need a modified LD_LIBRARY_PATH.

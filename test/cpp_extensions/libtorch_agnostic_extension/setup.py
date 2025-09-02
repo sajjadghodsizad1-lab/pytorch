@@ -4,8 +4,7 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-import torch
-from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
+from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 
 ROOT_DIR = Path(__file__).parent
@@ -36,16 +35,10 @@ def get_extension():
         "cxx": ["-fdiagnostics-color=always"],
     }
 
-    extension = CppExtension
-    # allow including <cuda_runtime.h>
-    if torch.cuda.is_available():
-        extra_compile_args["cxx"].append("-DLAE_USE_CUDA")
-        extension = CUDAExtension
-
     sources = list(CSRC_DIR.glob("**/*.cpp"))
 
     return [
-        extension(
+        CppExtension(
             "libtorch_agnostic._C",
             sources=sorted(str(s) for s in sources),
             py_limited_api=True,
