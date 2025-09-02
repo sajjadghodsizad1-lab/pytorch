@@ -283,20 +283,16 @@ persistent_tma_mm_template = TritonTemplate(
     tl.extra.cuda.experimental_tensormap_fenceproxy_acquire(b_desc_ptr)
 
     {%- else %}
-    stride_am = {{stride("A", 0)}}
-    stride_ak = {{stride("A", 1)}}
-    stride_bk = {{stride("B", 0)}}
-    stride_bn = {{stride("B", 1)}}
     a_desc = triton.language.make_tensor_descriptor(
         base=A,
         shape=[M, K] if A_ROW_MAJOR else [K, M],
-        strides=[stride_am, 1] if A_ROW_MAJOR else [stride_ak, 1],
+        strides=[K, 1] if A_ROW_MAJOR else [M, 1],
         block_shape=[BLOCK_M, BLOCK_K] if A_ROW_MAJOR else [BLOCK_K, BLOCK_M],
     )
     b_desc = triton.language.make_tensor_descriptor(
         base=B,
         shape=[K, N] if B_ROW_MAJOR else [N, K],
-        strides=[stride_bk, 1] if B_ROW_MAJOR else [stride_bn, 1],
+        strides=[N, 1] if B_ROW_MAJOR else [K, 1],
         block_shape=[BLOCK_K, BLOCK_N] if B_ROW_MAJOR else [BLOCK_N, BLOCK_K],
     )
     {%- endif %}
@@ -465,18 +461,16 @@ device_tma = r"""
     tl.extra.cuda.experimental_tensormap_fenceproxy_acquire(b_desc_ptr)
 
     {%- else %}
-    stride_am = {{stride("A", 0)}}
-    stride_bn = {{stride("B", 1)}}
     a_desc = triton.language.make_tensor_descriptor(
         base=A,
         shape=[M, K],
-        strides=[stride_am, 1],
+        strides=[K, 1],
         block_shape=[BLOCK_M, BLOCK_K],
     )
     b_desc = triton.language.make_tensor_descriptor(
         base=B,
         shape=[N, K],
-        strides=[stride_bn, 1],
+        strides=[K, 1],
         block_shape=[BLOCK_N, BLOCK_K],
     )
     {%- endif %}

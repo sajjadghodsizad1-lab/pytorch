@@ -767,22 +767,11 @@ def get_verbose_code_part(code_part: str, guard: Optional[Guard]) -> str:
 
 
 def get_verbose_code_parts(
-    code_parts: Union[str, list[str]],
-    guard: Optional[Guard],
-    recompile_hint: Optional[str] = None,
+    code_parts: Union[str, list[str]], guard: Optional[Guard]
 ) -> list[str]:
     if not isinstance(code_parts, list):
         code_parts = [code_parts]
-
-    verbose_code_parts = [
-        get_verbose_code_part(code_part, guard) for code_part in code_parts
-    ]
-    if recompile_hint:
-        verbose_code_parts = [
-            f"{part} (HINT: {recompile_hint})" for part in verbose_code_parts
-        ]
-
-    return verbose_code_parts
+    return [get_verbose_code_part(code_part, guard) for code_part in code_parts]
 
 
 def convert_int_to_concrete_values(dim: Any) -> Optional[int]:
@@ -1943,14 +1932,12 @@ class GuardBuilder(GuardBuilderBase):
             get_verbose_code_parts(code, guard)
         )
 
-    def ID_MATCH(self, guard: Guard, recompile_hint: Optional[str] = None) -> None:
+    def ID_MATCH(self, guard: Guard) -> None:
         if self.serialization_mode == "save":
             raise torch._dynamo.exc.PackageError("ID_MATCH guard cannot be serialized.")
-        return self.id_match_unchecked(guard, recompile_hint)
+        return self.id_match_unchecked(guard)
 
-    def id_match_unchecked(
-        self, guard: Guard, recompile_hint: Optional[str] = None
-    ) -> None:
+    def id_match_unchecked(self, guard: Guard) -> None:
         # ___check_obj_id is same as `id(x) == y`
         if isinstance(guard.originating_source, TypeSource):
             # optional optimization to produce cleaner/faster guard code
@@ -1963,8 +1950,9 @@ class GuardBuilder(GuardBuilderBase):
         id_val = self.id_ref(val, guard.name)
         code = f"___check_obj_id({ref}, {id_val})"
         self._set_guard_export_info(guard, [code], provided_func_name="ID_MATCH")
+
         self.get_guard_manager(guard).add_id_match_guard(
-            id_val, get_verbose_code_parts(code, guard, recompile_hint)
+            id_val, get_verbose_code_parts(code, guard)
         )
 
         # Keep track of ID_MATCH'd objects. This will be used to modify the
@@ -2214,7 +2202,7 @@ class GuardBuilder(GuardBuilderBase):
             raise torch._dynamo.exc.PackageError(
                 "NN_MODULE guard cannot be serialized."
             )
-        self.ID_MATCH(guard, "[inline-inbuilt-nn-modules-candidate]")
+        self.ID_MATCH(guard)
         val = self.get(guard.name)
         if hasattr(val, "training"):
             assert istype(val.training, bool)
@@ -4043,13 +4031,10 @@ def get_guard_fail_reason(
     code: types.CodeType,
     f_locals: dict[str, object],
     compile_id: CompileId,
-    skip_logging: bool = False,
 ) -> str:
     if isinstance(guard_manager, DeletedGuardManagerWrapper):
         return f"{compile_id}: {guard_manager.invalidation_reason}"
     reason_str = get_guard_fail_reason_helper(guard_manager, f_locals, compile_id)
-    if skip_logging:
-        return reason_str
     guard_failures[orig_code_map[code]].append(reason_str)
 
     try:
@@ -4066,9 +4051,7 @@ def get_guard_fail_reason(
 
 
 def get_and_maybe_log_recompilation_reasons(
-    cache_entry: Optional[CacheEntry],
-    frame: DynamoFrameType,
-    skip_logging: bool = False,
+    cache_entry: Optional[CacheEntry], frame: DynamoFrameType
 ) -> list[str]:
     """
     Return the list of guard failure reasons using cache_entry.
@@ -4082,7 +4065,6 @@ def get_and_maybe_log_recompilation_reasons(
             cache_entry.code,
             frame.f_locals,
             cache_entry.compile_id,
-            skip_logging,
         )
         if reason:
             reasons.append(reason)
@@ -4090,8 +4072,6 @@ def get_and_maybe_log_recompilation_reasons(
 
     code = frame.f_code
 
-    if skip_logging:
-        return reasons
     # at least one of "recompiles" or "recompiles_verbose" is enabled
     do_recompiles_log = is_recompiles_enabled() or is_recompiles_verbose_enabled()
 
