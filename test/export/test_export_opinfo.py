@@ -2,12 +2,13 @@
 # ruff: noqa: F841
 # flake8: noqa
 
-import itertools
+import subprocess
+import sys
 
 import torch
-from torch._subclasses.fake_tensor import FakeTensor, FakeTensorMode
 from torch.testing._internal.common_device_type import (
     instantiate_device_type_tests,
+    onlyCUDA,
     ops,
 )
 from torch.testing._internal.common_methods_invocations import (
@@ -17,7 +18,6 @@ from torch.testing._internal.common_methods_invocations import (
     xfail,
 )
 from torch.testing._internal.common_utils import run_tests, TestCase
-from torch.utils import _pytree as pytree
 
 
 # following are failing with regular torch.export.export
@@ -50,17 +50,11 @@ fake_export_failures = {
     xfail("masked.std"),
     xfail("masked.sum"),
     xfail("masked.var"),
-    xfail("nn.functional.grid_sample"),
     xfail("to_sparse"),
     # cannot xfail as it is passing for cpu-only build
+    skip("nn.functional.grid_sample"),
     skip("nn.functional.conv2d"),
     skip("nn.functional.scaled_dot_product_attention"),
-    # following are failing due to OptionalDeviceGuard
-    xfail("__getitem__"),
-    xfail("nn.functional.batch_norm"),
-    xfail("nn.functional.instance_norm"),
-    xfail("nn.functional.multi_margin_loss"),
-    xfail("nonzero"),
 }
 
 fake_decomposition_failures = {
@@ -73,64 +67,80 @@ fake_decomposition_failures = {
 }
 
 
-def _test_export_helper(self, dtype, op):
-    sample_inputs_itr = op.sample_inputs("cpu", dtype, requires_grad=False)
-
-    mode = FakeTensorMode(allow_non_fake_inputs=True)
-    converter = mode.fake_tensor_converter
-    # intentionally avoid cuda:0 to flush out some bugs
-    target_device = "cuda:1"
-
-    def to_fake_device(x):
-        x = converter.from_real_tensor(mode, x)
-        x.fake_device = torch.device(target_device)
-        return x
-
-    # Limit to first 100 inputs so tests don't take too long
-    for sample_input in itertools.islice(sample_inputs_itr, 100):
-        args = tuple([sample_input.input] + list(sample_input.args))
-        kwargs = sample_input.kwargs
-
-        # hack to skip non-tensor in args, as export doesn't support it
-        if any(not isinstance(arg, torch.Tensor) for arg in args):
-            continue
-
-        if "device" in kwargs:
-            kwargs["device"] = target_device
-
-        with mode:
-            args, kwargs = pytree.tree_map_only(
-                torch.Tensor, to_fake_device, (args, kwargs)
-            )
-
-            class Module(torch.nn.Module):
-                def forward(self, *args):
-                    return op.op(*args, **kwargs)
-
-            m = Module()
-
-            ep = torch.export.export(m, args)
-
-            for node in ep.graph.nodes:
-                if node.op == "call_function":
-                    fake_tensor = node.meta.get("val", None)
-                    if isinstance(fake_tensor, FakeTensor):
-                        self.assertEqual(
-                            fake_tensor.device, torch.device(target_device)
-                        )
-
-
 class TestExportOpInfo(TestCase):
+    @onlyCUDA
     @ops(op_db, allowed_dtypes=(torch.float,))
     @skipOps(
         "TestExportOpInfo", "test_fake_export", export_failures | fake_export_failures
     )
     def test_fake_export(self, device, dtype, op):
-        _test_export_helper(self, dtype, op)
+        test_script = f"""\
+import torch
+import itertools
+from torch.testing._internal.common_methods_invocations import op_db
+from torch._subclasses.fake_tensor import FakeTensor, FakeTensorMode
+from torch.utils import _pytree as pytree
+
+ops = [op for op in op_db if op.name == "{op.name}"]
+assert len(ops) == 1
+op = ops[0]
+
+sample_inputs_itr = op.sample_inputs("cpu", torch.float, requires_grad=False)
+
+mode = FakeTensorMode(allow_non_fake_inputs=True)
+converter = mode.fake_tensor_converter
+# intentionally avoid cuda:0 to flush out some bugs
+target_device = "cuda:1"
+
+def to_fake_device(x):
+    x = converter.from_real_tensor(mode, x)
+    x.fake_device = torch.device(target_device)
+    return x
+
+# Limit to first 100 inputs so tests don't take too long
+for sample_input in itertools.islice(sample_inputs_itr, 100):
+    args = tuple([sample_input.input] + list(sample_input.args))
+    kwargs = sample_input.kwargs
+
+    # hack to skip non-tensor in args, as export doesn't support it
+    if any(not isinstance(arg, torch.Tensor) for arg in args):
+        continue
+
+    if "device" in kwargs:
+        kwargs["device"] = target_device
+
+    with mode:
+        args, kwargs = pytree.tree_map_only(
+            torch.Tensor, to_fake_device, (args, kwargs)
+        )
+
+        class Module(torch.nn.Module):
+            def forward(self, *args):
+                return op.op(*args, **kwargs)
+
+        m = Module()
+
+        ep = torch.export.export(m, args)
+
+        for node in ep.graph.nodes:
+            if node.op == "call_function":
+                fake_tensor = node.meta.get("val", None)
+                if isinstance(fake_tensor, FakeTensor):
+                    assert fake_tensor.device == torch.device(target_device)
+"""
+        r = (
+            (
+                subprocess.check_output(
+                    [sys.executable, "-c", test_script],
+                    env={"CUDA_VISIBLE_DEVICES": ""},
+                )
+            )
+            .decode("ascii")
+            .strip()
+        )
 
 
-only_for = "cpu"
-instantiate_device_type_tests(TestExportOpInfo, globals(), only_for=only_for)
+instantiate_device_type_tests(TestExportOpInfo, globals())
 
 
 if __name__ == "__main__":
