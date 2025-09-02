@@ -55,14 +55,13 @@ Tensor& addmm_out(
   if (self.is_complex()) {
     static auto op = c10::Dispatcher::singleton().findSchemaOrThrow(
         "aten::_addmm_mkl", "out");
-
     static auto op_typed = op.typed<decltype(addmm_out)>();
 
-    if (op.hasKernelForDispatchKey(c10::DispatchKey::XPU)) {
-      op_typed.call(self, mat1, mat2, beta, alpha, result);
-    } else {
-      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
-    }
+    TORCH_CHECK(
+        op.hasKernelForDispatchKey(c10::DispatchKey::XPU),
+        "Complex datatype matmul is not supported in oneDNN");
+    op_typed.call(self, mat1, mat2, beta, alpha, result);
+
     return result;
   }
 
@@ -182,14 +181,13 @@ Tensor& mm_out(const Tensor& self, const Tensor& mat2, Tensor& result) {
   if (self.is_complex()) {
     static auto op =
         c10::Dispatcher::singleton().findSchemaOrThrow("aten::_mm_mkl", "out");
-
     static auto op_typed = op.typed<decltype(mm_out)>();
 
-    if (op.hasKernelForDispatchKey(c10::DispatchKey::XPU)) {
-      op_typed.call(self, mat2, result);
-    } else {
-      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
-    }
+    TORCH_CHECK(
+        op.hasKernelForDispatchKey(c10::DispatchKey::XPU),
+        "Complex datatype matmul is not supported in oneDNN");
+    op_typed.call(self, mat2, result);
+
     return result;
   }
 
@@ -234,14 +232,13 @@ Tensor& baddbmm_out(
   if (input.is_complex()) {
     static auto op = c10::Dispatcher::singleton().findSchemaOrThrow(
         "aten::_baddbmm_mkl", "out");
-
     static auto op_typed = op.typed<decltype(baddbmm_out)>();
 
-    if (op.hasKernelForDispatchKey(c10::DispatchKey::XPU)) {
-      op_typed.call(input, batch1, batch2, beta, alpha, result);
-    } else {
-      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
-    }
+    TORCH_CHECK(
+        op.hasKernelForDispatchKey(c10::DispatchKey::XPU),
+        "Complex datatype matmul is not supported in oneDNN");
+    op_typed.call(input, batch1, batch2, beta, alpha, result);
+
     return result;
   }
 
@@ -294,14 +291,13 @@ Tensor& bmm_out(const Tensor& self, const Tensor& batch2, Tensor& result) {
   if (self.is_complex()) {
     static auto op =
         c10::Dispatcher::singleton().findSchemaOrThrow("aten::_bmm_mkl", "out");
-
     static auto op_typed = op.typed<decltype(bmm_out)>();
 
-    if (op.hasKernelForDispatchKey(c10::DispatchKey::XPU)) {
-      op_typed.call(self, batch2, result);
-    } else {
-      TORCH_CHECK(false, "Complex datatype matmul is not supported in oneDNN");
-    }
+    TORCH_CHECK(
+        op.hasKernelForDispatchKey(c10::DispatchKey::XPU),
+        "Complex datatype matmul is not supported in oneDNN");
+    op_typed.call(self, batch2, result);
+
     return result;
   }
 
@@ -605,5 +601,4 @@ Tensor _int_mm_xpu(const Tensor& self, const Tensor& mat2) {
       at::empty({self.size(0), mat2.size(1)}, self.options().dtype(at::kInt));
   return _int_mm_out_xpu(self, mat2, result);
 }
-
 } // namespace at::native
