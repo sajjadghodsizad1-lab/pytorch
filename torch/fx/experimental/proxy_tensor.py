@@ -1430,11 +1430,9 @@ class PreDispatchTorchFunctionMode(TorchFunctionMode):
                 torch.amp.autocast_mode._exit_autocast,
             ]:
                 node.meta["val"] = None
-            # For autocast, the python APIs run so we don't have to run them again
-            # here.
-            if func is torch._C._set_grad_enabled:
-                func(*args, **kwargs)
             return node
+            # Don't actually run the function! We just want to trace the calls
+            # into a graph. We don't actually want to change global autograd state.
         return func(*args, **kwargs)
 
 
@@ -2345,8 +2343,7 @@ def make_fx(
         record_module_stack,
         _allow_fake_constant,
         _error_on_data_dependent_ops,
-        record_stack_traces=record_stack_traces
-        or config.trace.provenance_tracking_level == 1,
+        record_stack_traces=record_stack_traces or config.trace.provenance_tracking,
     )
 
     @functools.wraps(f)

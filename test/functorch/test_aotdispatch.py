@@ -5364,15 +5364,11 @@ def forward(self, arg0_1, arg1_1, arg2_1):
 
         mod = M()
         inp = torch.randn(2, requires_grad=True)
-        gm, _ = aot_export_module(mod, [inp], trace_joint=False)
-        self.assertExpectedInline(
-            str(gm.graph).strip(),
-            """\
-graph():
-    %arg0_1 : [num_users=1] = placeholder[target=arg0_1]
-    %add : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg0_1, 4), kwargs = {})
-    return (add, add)""",
-        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Found a graph input that requires gradients, and received a mutation",
+        ):
+            aot_export_module(mod, [inp], trace_joint=False)
 
     def test_aot_export_input_mutation_on_parameter_banned(self):
         def fn(p, x):
@@ -5383,26 +5379,11 @@ graph():
         inp = torch.randn(2)
         with self.assertRaisesRegex(
             RuntimeError,
-            "aot_export_joint_simple does not support input mutations. ViewAndMutationMeta",
-        ):
-            aot_export_joint_simple(fn, [mod.p, inp], trace_joint=False)
-        with self.assertRaisesRegex(
-            RuntimeError,
             "Found a graph input that requires gradients, and received a mutation",
         ):
+            aot_export_joint_simple(fn, [mod.p, inp], trace_joint=False)
             aot_export_joint_simple(fn, [mod.p, inp], trace_joint=True)
-
-        gm, _ = aot_export_module(mod, [inp], trace_joint=False)
-        self.assertExpectedInline(
-            str(gm.graph).strip(),
-            """\
-graph():
-    %arg0_1 : [num_users=1] = placeholder[target=arg0_1]
-    %arg1_1 : [num_users=1] = placeholder[target=arg1_1]
-    %mul : [num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg0_1, 2), kwargs = {})
-    %add : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul, %arg1_1), kwargs = {})
-    return (mul, add)""",
-        )
+            aot_export_module(mod, [inp], trace_joint=False)
 
     def test_aot_export_synthetic_bases_banned(self):
         def fn(p, x, y):

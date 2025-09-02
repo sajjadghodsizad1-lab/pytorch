@@ -1,3 +1,5 @@
+# mypy: ignore-errors
+
 """
 This module provides common utilities and base classes for TorchDynamo backends.
 
@@ -19,9 +21,6 @@ optimization of both forward and backward passes.
 import contextlib
 import functools
 import logging
-from collections.abc import Iterable
-from typing import Any, Callable
-from typing_extensions import ParamSpec, TypeVar
 from unittest.mock import patch
 
 import torch
@@ -37,18 +36,13 @@ from torch.utils._python_dispatch import _disable_current_modes
 
 log = logging.getLogger(__name__)
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
 
 class AotAutograd:
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs) -> None:
         self.__name__ = "compiler_fn"
         self.kwargs = kwargs
 
-    def __call__(
-        self, gm: torch.fx.GraphModule, example_inputs: Iterable[Any], **kwargs: Any
-    ) -> Callable[..., Any]:
+    def __call__(self, gm: torch.fx.GraphModule, example_inputs, **kwargs):
         if kwargs:
             log.warning("aot_autograd-based backend ignoring extra kwargs %s", kwargs)
 
@@ -72,8 +66,8 @@ class AotAutograd:
             counters["aot_autograd"]["not_ok"] += 1
             return gm
 
-        def wrap_bw_compiler(bw_compiler_fn: Callable[P, R]) -> Callable[..., R]:
-            def _wrapped_bw_compiler(*args: P.args, **kwargs: P.kwargs) -> R:
+        def wrap_bw_compiler(bw_compiler_fn):
+            def _wrapped_bw_compiler(*args, **kwargs):
                 # Note [Wrapping bw_compiler in disable]
                 # The two disables here:
                 # - stop TorchDynamo from trying to compile the bw_compiler function itself
@@ -81,7 +75,7 @@ class AotAutograd:
                 return disable(
                     disable(
                         bw_compiler_fn, reason="do not trace backward compiler function"
-                    )(*args, **kwargs),  # type: ignore[misc]
+                    )(*args, **kwargs),
                     reason="do not trace generated backwards pass",
                 )
 
@@ -105,9 +99,7 @@ class AotAutograd:
         # debug asserts slow down compile time noticeably,
         # So only default them on when the aot_eager backend is used.
         if self.kwargs.get("fw_compiler", None) == nop:
-            patch_config: contextlib.AbstractContextManager[Any] = patch(
-                "functorch.compile.config.debug_assert", True
-            )
+            patch_config = patch("functorch.compile.config.debug_assert", True)
         else:
             patch_config = contextlib.nullcontext()
 
@@ -124,11 +116,11 @@ class AotAutograd:
             raise
 
 
-def aot_autograd(**kwargs: Any) -> AotAutograd:
+def aot_autograd(**kwargs) -> AotAutograd:
     return AotAutograd(**kwargs)
 
 
-def mem_efficient_fusion_kwargs(use_decomps: bool) -> dict[str, Any]:
+def mem_efficient_fusion_kwargs(use_decomps):
     from functorch.compile import (
         default_decompositions,
         min_cut_rematerialization_partition,
@@ -148,30 +140,28 @@ def mem_efficient_fusion_kwargs(use_decomps: bool) -> dict[str, Any]:
     return kwargs
 
 
-def fake_tensor_unsupported(fn: Callable[[Any, list[Any], Any], R]) -> Any:
+def fake_tensor_unsupported(fn):
     """
     Decorator for backends that need real inputs.  We swap out fake
     tensors for zero tensors.
     """
 
     @functools.wraps(fn)
-    def wrapper(model: Any, inputs: Any, **kwargs: Any) -> Any:
+    def wrapper(model, inputs, **kwargs):
         with _disable_current_modes():
             inputs = list(map(defake, inputs))
-            return fn(model, inputs, **kwargs)  # type: ignore[call-arg]
+            return fn(model, inputs, **kwargs)
 
     return wrapper
 
 
-def device_from_inputs(example_inputs: Iterable[Any]) -> torch.device:
+def device_from_inputs(example_inputs) -> torch.device:
     for x in example_inputs:
         if hasattr(x, "device"):
             return x.device
-    return torch.device("cpu")  # Default fallback
 
 
-def dtype_from_inputs(example_inputs: Iterable[Any]) -> torch.dtype:
+def dtype_from_inputs(example_inputs) -> torch.dtype:
     for x in example_inputs:
         if hasattr(x, "dtype"):
             return x.dtype
-    return torch.float32  # Default fallback
