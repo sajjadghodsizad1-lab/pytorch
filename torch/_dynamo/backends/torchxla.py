@@ -1,33 +1,26 @@
-import logging
-from typing import Any, Callable
+# mypy: ignore-errors
 
-import torch
+import logging
+
 from functorch.compile import make_boxed_func
-from torch import fx
 
 from ..backends.common import aot_autograd
-from .registry import CompiledFn, register_backend, register_experimental_backend
+from .registry import register_backend, register_experimental_backend
 
 
 log = logging.getLogger(__name__)
 
 
 @register_experimental_backend
-def openxla_eval(
-    model: fx.GraphModule, fake_tensor_inputs: list[torch.Tensor]
-) -> CompiledFn:
+def openxla_eval(model, fake_tensor_inputs):
     return xla_backend_helper(model, fake_tensor_inputs, boxed=False)
 
 
-def openxla_eval_boxed(
-    model: fx.GraphModule, fake_tensor_inputs: list[torch.Tensor]
-) -> Callable[..., Any]:
+def openxla_eval_boxed(model, fake_tensor_inputs):
     return xla_backend_helper(model, fake_tensor_inputs, boxed=True)
 
 
-def xla_backend_helper(
-    model: fx.GraphModule, fake_tensor_inputs: list[torch.Tensor], boxed: bool = False
-) -> Callable[..., Any]:
+def xla_backend_helper(model, fake_tensor_inputs, boxed=False):
     try:
         import torch_xla.core.dynamo_bridge as bridge
     except ImportError as e:
@@ -37,7 +30,7 @@ def xla_backend_helper(
 
     compiled_graph = None
 
-    def fwd(*args: torch.Tensor) -> Any:
+    def fwd(*args):
         nonlocal model
         nonlocal compiled_graph
         if compiled_graph is None:

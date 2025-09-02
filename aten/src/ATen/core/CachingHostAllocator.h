@@ -1,7 +1,6 @@
 #pragma once
 
 #include <c10/core/Allocator.h>
-#include <c10/core/AllocatorConfig.h>
 #include <c10/core/Stream.h>
 #include <c10/core/thread_pool.h>
 #include <c10/util/flat_hash_map.h>
@@ -352,8 +351,7 @@ struct CachingHostAllocatorImpl {
   }
 
   virtual bool pinned_use_background_threads() {
-    return c10::CachingAllocator::AcceleratorAllocatorConfig::
-        pinned_use_background_threads();
+    return false;
   }
 
   virtual void copy_data(void* dest [[maybe_unused]], const void* src [[maybe_unused]], std::size_t count [[maybe_unused]]) const {

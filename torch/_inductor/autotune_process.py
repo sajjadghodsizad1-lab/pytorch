@@ -31,12 +31,7 @@ from torch._inductor.codecache import (
     get_hash,
     PyCodeCache,
 )
-from torch._inductor.utils import (
-    get_gpu_type,
-    get_ld_library_path,
-    is_gpu,
-    python_subprocess_env,
-)
+from torch._inductor.utils import get_gpu_type, get_ld_library_path, is_gpu
 from torch._logging import getArtifactLogger
 from torch.utils._ordered_set import OrderedSet
 
@@ -128,8 +123,11 @@ class TuningProcess:
             f"--read-fd={str(subproc_read_fd)}",
             f"--write-fd={str(subproc_write_fd)}",
         ]
-        env = {
-            **python_subprocess_env(),
+        extra_env = {
+            # We need to set the PYTHONPATH so the subprocess can find torch.
+            "PYTHONPATH": os.environ.get(
+                "TORCH_CUSTOM_PYTHONPATH", os.pathsep.join(sys.path)
+            ),
             # We shouldn't be using the Triton async compile subprocess pool,
             # but as a precaution set the env var that disables its creation.
             "TORCH_WARM_POOL": "0",
@@ -141,10 +139,10 @@ class TuningProcess:
             else "0",
         }
         if self.device is not None:
-            env[CUDA_VISIBLE_DEVICES] = str(self.device)
+            extra_env[CUDA_VISIBLE_DEVICES] = str(self.device)
         self.process = subprocess.Popen(
             cmd,
-            env=env,
+            env={**os.environ, **extra_env},
             pass_fds=(subproc_read_fd, subproc_write_fd),
         )
         os.close(subproc_read_fd)
