@@ -7286,8 +7286,9 @@ class DynamicSliceSize(ExternKernel):
     def __init__(
         self,
         unbacked_size_symbol: sympy.Symbol,
-        start: sympy.Symbol,
+        start: Union[sympy.Symbol, int],
         end: Union[sympy.Symbol, int],
+        step: Union[sympy.Symbol, int],
         size: Union[sympy.Symbol, int],
     ):
         super().__init__(None, NoneLayout(device=torch.device("cpu")), [])
@@ -7295,6 +7296,7 @@ class DynamicSliceSize(ExternKernel):
         self.unbacked_size_symbol = unbacked_size_symbol
         self.start = start
         self.end = end
+        self.step = step
         self.size = size
 
     def get_unbacked_symbol_defs(self) -> OrderedSet[sympy.Symbol]:

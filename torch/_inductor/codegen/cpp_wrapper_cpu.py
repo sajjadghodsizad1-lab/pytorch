@@ -1517,22 +1517,27 @@ class CppWrapperCpu(PythonWrapperCodegen):
         start_cpp_str = self.val_to_arg_str_for_prim_type(node.start, int)
         end_cpp_str = self.val_to_arg_str_for_prim_type(node.end, int)
         size_cpp_str = self.val_to_arg_str_for_prim_type(node.size, int)
+        step_cpp_str = self.val_to_arg_str_for_prim_type(node.step, int)
         sym = node.unbacked_size_symbol
 
         def codegen_clamp(index_str, start=True):
-            suf = "start" if start else "end"
+            suf = "st" if start else "en"
             index_ = f"{sym}_{suf}_index"
             self.writeline(
-                f"auto {index_} = {index_str} < 0 ? {index_str} + {size_cpp_str} : {index_str};"
+                f"int64_t {index_} = {index_str} < 0 ? {index_str} + {size_cpp_str} : {index_str};"
             )
             self.writeline(
-                f"auto {sym}_{suf}_clamped = {index_} < 0 ? 0 : ({index_} > {size_cpp_str} ? {size_cpp_str} : {index_});"
+                f"int64_t {sym}_{suf}_cl = {index_} < 0 ? 0 : ({index_} > {size_cpp_str} ? {size_cpp_str} : {index_});"
             )
 
         codegen_clamp(start_cpp_str, start=True)
         codegen_clamp(end_cpp_str, start=False)
-        self.writeline(f"auto {sym}_raw = {sym}_end_clamped - {sym}_start_clamped;")
-        self.writeline(f"auto {sym} = {sym}_raw < 0 ? 0 : {sym}_raw;")
+        if node.step == 1:
+            step_str = f"{sym}_en_cl - {sym}_st_cl"
+        else:
+            step_str = f"({sym}_en_cl - {sym}_st_cl + {step_cpp_str} + 1) / {step_cpp_str}"
+        self.writeline(f"int64_t {sym}_with_step = {step_str};")
+        self.writeline(f"int64_t {sym} = {sym}_with_step < 0 ? 0 : {sym}_with_step;")
         self.unbacked_symbol_decls.add(str(sym))
 
     def make_buffer_free(self, buffer):

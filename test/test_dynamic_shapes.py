@@ -3537,6 +3537,24 @@ def forward(self, arg0_1: "i64[2][1]cpu", arg1_1: "Sym(u2)", arg2_1: "Sym(u3)", 
 
     @fresh_cache()
     @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    def test_unbacked_slice_with_step(self):
+        def f1(x, xs):
+            u0, u1 = xs.tolist()
+            out = x[u0:u1:5]
+            return out
+
+        x, xs = torch.randn(10), torch.tensor([2, -2])
+        fn1 = torch.compile(f1, fullgraph=True, backend="inductor")
+        self.assertTrue(torch.allclose(fn1(x, xs), f1(x, xs)))
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    @torch._inductor.config.patch("cpp_wrapper", True)
+    def test_unbacked_slice_with_step_cpp_wrapper(self):
+        self.test_unbacked_slice_with_step()
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
     def test_tensor_split(self):
         def f1(x, xs):
             xs = torch.tensor(xs.tolist())
@@ -3561,6 +3579,67 @@ def forward(self, arg0_1: "i64[2][1]cpu", arg1_1: "Sym(u2)", arg2_1: "Sym(u3)", 
     @torch._inductor.config.patch("cpp_wrapper", True)
     def test_tensor_split_cpp_wrapper(self):
         self.test_tensor_split()
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    @torch._dynamo.config.patch("capture_dynamic_output_shape_ops", True)
+    def test_nonzero_slice(self):
+        def f(x):
+            nz = x.nonzero()
+            return nz[:-1]
+
+        x = torch.randn(3, 4)
+        fn = torch.compile(f, fullgraph=True, backend="inductor")
+        self.assertTrue(torch.allclose(f(x), fn(x)))
+        y = torch.zeros(3, 4)
+        self.assertTrue(torch.allclose(f(y), fn(y)))
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    @torch._dynamo.config.patch("capture_dynamic_output_shape_ops", True)
+    @torch._inductor.config.patch("cpp_wrapper", True)
+    def test_nonzero_slice_cpp_wrapper(self):
+        self.test_nonzero_slice()
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    @torch._dynamo.config.patch("capture_dynamic_output_shape_ops", True)
+    def test_nonzero_select(self):
+        def f(x):
+            nz = x.nonzero()
+            return nz[-1] + nz[0]
+
+        x = torch.randn(3, 4)
+        fn = torch.compile(f, fullgraph=True, backend="inductor")
+        self.assertTrue(torch.allclose(f(x), fn(x)))
+        with self.assertRaisesRegex(IndexError, "index .* is out of bounds for dimension 0"):
+            fn(torch.zeros(3, 4))
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    @torch._dynamo.config.patch("capture_dynamic_output_shape_ops", True)
+    @torch._inductor.config.patch("cpp_wrapper", True)
+    def test_nonzero_select_cpp_wrapper(self):
+        self.test_nonzero_select()
+
+    @fresh_cache()
+    @torch._dynamo.config.patch("capture_scalar_outputs", True)
+    @torch._dynamo.config.patch("capture_dynamic_output_shape_ops", True)
+    def test_padnd(self):
+        import torch.nn.functional as F
+
+        def f(x, xs, y):
+            u0, u1 = xs.tolist()
+            for u in [u0, u1]:
+                torch._check(u >= 0)
+            z = F.pad(x, (u0, u1, u0, u1))
+            return z @ y
+
+        x = torch.randn(8, 8)
+        xs = torch.tensor([2, 2])
+        y = torch.randn(12, 4)
+        fn = torch.compile(f, fullgraph=True, backend="inductor")
+        fn(x, xs, y)
 
     @unittest.skip("this test fails due to inductor/autograd issue #153041")
     @torch._dynamo.config.patch("capture_scalar_outputs", True)

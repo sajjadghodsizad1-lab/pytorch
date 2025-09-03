@@ -1911,13 +1911,20 @@ class PythonWrapperCodegen(CodeGen):
             )
             return f"{pos} if {x} >= 0 else {neg}"
 
+        def codegen_with_step(start_var, end_var, step):
+            if step == 1:
+                return f"{end_var} - {start_var}"
+            step_ = self.codegen_sizevar(step)
+            return f"({end_var} - {start_var} + {step_} - 1) // {step_}"
+
         # codegen start, end
         sym = node.unbacked_size_symbol
         start = clamp_index(node.start)
         end = clamp_index(node.end)
         self.writeline(f"{sym}_start = {start}")
         self.writeline(f"{sym}_end = {end}")
-        self.writeline(f"{sym} = max(0, {sym}_end - {sym}_start)")
+        with_step = codegen_with_step(f"{sym}_start", f"{sym}_end", node.step)
+        self.writeline(f"{sym} = max(0, {with_step})")
         self.unbacked_symbol_decls.add(str(node.unbacked_size_symbol))
 
     def codegen_dynamic_scalar(self, node):
