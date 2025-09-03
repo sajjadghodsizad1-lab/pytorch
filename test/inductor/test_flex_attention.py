@@ -28,11 +28,14 @@ from torch.nn.attention.flex_attention import (
     _identity,
     _mask_mod_signature,
     _score_mod_signature,
+    _WARNINGS_SHOWN,
     and_masks,
     BlockMask,
     create_block_mask,
     flex_attention,
     flex_attention_hop,
+    FlexAttentionAuxOutput,
+    FlexAttentionAuxRequest,
     noop_mask,
     or_masks,
 )
@@ -1964,6 +1967,234 @@ def forward(self, arg0_1, arg1_1, arg2_1, arg3_1, arg4_1):
     @supported_platform
     @dtypes(*device_configs["cpu"].dtypes_fast)
     @dtypesIfCUDA(*device_configs["cuda"].dtypes_fast)
+    @common_utils.parametrize(
+        "score_mod", test_score_mods, name_fn=lambda score_mod: score_mod.__name__
+    )
+    @skip_on_cpu
+    def test_return_max(self, device, dtype, score_mod):
+        make_tensor = functools.partial(
+            torch.randn,
+            (2, 2, 243, 16),
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
+        query, key, value = make_tensor(), make_tensor(), make_tensor()
+
+        out_only = flex_attention(query, key, value, score_mod)
+        out_max, aux_max = flex_attention(
+            query,
+            key,
+            value,
+            score_mod,
+            return_aux=FlexAttentionAuxRequest(max_scores=True),
+        )
+        out_both, aux_both = flex_attention(
+            query,
+            key,
+            value,
+            score_mod,
+            return_aux=FlexAttentionAuxRequest(lse=True, max_scores=True),
+        )
+
+        flex_compile = torch.compile(flex_attention, fullgraph=True)
+        out_compiled, aux_compiled = flex_compile(
+            query,
+            key,
+            value,
+            score_mod,
+            return_aux=FlexAttentionAuxRequest(max_scores=True),
+        )
+
+        torch.testing.assert_close(out_only, out_max, atol=1e-6, rtol=1e-6)
+        torch.testing.assert_close(out_only, out_both, atol=1e-6, rtol=1e-6)
+        torch.testing.assert_close(
+            aux_max.max_scores, aux_both.max_scores, atol=1e-6, rtol=1e-6
+        )
+
+        # we are calculating slightly different scores so add a lil fudge
+        # Extra tolerance for squared score_mod with float16 due to limited dynamic range
+        if score_mod.__name__ == "_squared" and dtype == torch.float16:
+            atol, rtol = 2e-2, 2e-2
+        else:
+            atol, rtol = 5e-3, 5e-3
+
+        torch.testing.assert_close(out_max, out_compiled, atol=atol, rtol=rtol)
+        torch.testing.assert_close(
+            aux_max.max_scores, aux_compiled.max_scores, atol=atol, rtol=rtol
+        )
+
+        B, H, L = query.shape[:3]
+        self.assertEqual(aux_max.max_scores.shape, (B, H, L))
+
+        max_score_tensors = [
+            aux_max.max_scores,
+            aux_both.max_scores,
+            aux_compiled.max_scores,
+        ]
+        for max_tensor in max_score_tensors:
+            self.assertFalse(
+                max_tensor.requires_grad, "max_scores should not require gradients"
+            )
+            self.assertEqual(
+                max_tensor.dtype, torch.float32, "max_scores should be kept in fp32"
+            )
+
+        # Test gradient computation for both eager and compiled versions
+        test_cases = [
+            ("eager", out_max, "eager mode"),
+            ("compiled", out_compiled, "compiled mode"),
+        ]
+
+        for mode_name, output, description in test_cases:
+            loss = output.sum()
+            grads = torch.autograd.grad(loss, (query, key, value))
+
+            # Verify gradients are computed for all inputs
+            input_names = ["query", "key", "value"]
+            for grad, input_name in zip(grads, input_names):
+                self.assertIsNotNone(
+                    grad, f"{input_name} should receive gradients in {description}"
+                )
+
+    @supported_platform
+    @dtypes(*device_configs["cpu"].dtypes_fast)
+    @dtypesIfCUDA(*device_configs["cuda"].dtypes_fast)
+    @common_utils.parametrize(
+        "score_mod", test_score_mods, name_fn=lambda score_mod: score_mod.__name__
+    )
+    @skip_on_cpu
+    def test_return_aux(self, device, dtype, score_mod):
+        """Test the new return_aux API with FlexAttentionAuxRequest/Output"""
+        make_tensor = functools.partial(
+            torch.randn,
+            (2, 2, 243, 16),
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
+        query, key, value = make_tensor(), make_tensor(), make_tensor()
+
+        flex_compile = torch.compile(flex_attention, fullgraph=True)
+        flex_compile_partial = torch.compile(flex_attention, fullgraph=False)
+
+        # Test 1: No auxiliary outputs (default behavior)
+        out_only = flex_compile(query, key, value, score_mod)
+        self.assertIsInstance(out_only, torch.Tensor)
+
+        # Test 2: Request only LSE
+        out, aux_lse = flex_compile(
+            query, key, value, score_mod, return_aux=FlexAttentionAuxRequest(lse=True)
+        )
+        self.assertIsInstance(aux_lse, FlexAttentionAuxOutput)
+        self.assertIsInstance(aux_lse.lse, torch.Tensor)
+        self.assertIsNone(aux_lse.max_scores)
+        self.assertEqual(aux_lse.lse.shape, (2, 2, 243))
+        self.assertEqual(aux_lse.lse.dtype, torch.float32)
+
+        # Test 3: Request only max_scores
+        out, aux_max = flex_compile(
+            query,
+            key,
+            value,
+            score_mod,
+            return_aux=FlexAttentionAuxRequest(max_scores=True),
+        )
+        self.assertIsInstance(aux_max, FlexAttentionAuxOutput)
+        self.assertIsNone(aux_max.lse)
+        self.assertIsInstance(aux_max.max_scores, torch.Tensor)
+        self.assertEqual(aux_max.max_scores.shape, (2, 2, 243))
+        self.assertEqual(aux_max.max_scores.dtype, torch.float32)
+
+        # Test 4: Request both auxiliary outputs
+        out, aux_both = flex_compile(
+            query,
+            key,
+            value,
+            score_mod,
+            return_aux=FlexAttentionAuxRequest(lse=True, max_scores=True),
+        )
+        self.assertIsInstance(aux_both, FlexAttentionAuxOutput)
+        self.assertIsInstance(aux_both.lse, torch.Tensor)
+        self.assertIsInstance(aux_both.max_scores, torch.Tensor)
+        self.assertEqual(aux_both.lse.shape, (2, 2, 243))
+        self.assertEqual(aux_both.max_scores.shape, (2, 2, 243))
+
+        # Test 5: Request no auxiliary outputs explicitly
+        out, aux_none = flex_compile(
+            query,
+            key,
+            value,
+            score_mod,
+            return_aux=FlexAttentionAuxRequest(),  # Default is lse=False, max_scores=False
+        )
+        self.assertIsInstance(aux_none, FlexAttentionAuxOutput)
+        self.assertIsNone(aux_none.lse)
+        self.assertIsNone(aux_none.max_scores)
+
+        # Test 6: Verify outputs are consistent with legacy API, can't fullgraph through warnings
+        out_legacy, lse_legacy = flex_compile_partial(
+            query, key, value, score_mod, return_lse=True
+        )
+        torch.testing.assert_close(out_only, out_legacy, atol=1e-6, rtol=1e-6)
+        torch.testing.assert_close(aux_lse.lse, lse_legacy, atol=1e-6, rtol=1e-6)
+
+    @supported_platform
+    @dtypes(*device_configs["cpu"].dtypes_fast)
+    @dtypesIfCUDA(*device_configs["cuda"].dtypes_fast)
+    @skip_on_cpu
+    def test_return_aux_deprecation_warnings(self, device, dtype):
+        """Test that deprecation warnings are issued for legacy parameters"""
+        import warnings
+
+        make_tensor = functools.partial(
+            torch.randn,
+            (2, 2, 64, 16),
+            device=device,
+            dtype=dtype,
+        )
+        query, key, value = make_tensor(), make_tensor(), make_tensor()
+
+        # Clear shown warnings to ensure we can test them
+        original_shown = _WARNINGS_SHOWN.copy()
+        _WARNINGS_SHOWN.clear()
+
+        try:
+            # Test deprecation warning for return_lse
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                flex_attention(query, key, value, return_lse=True)
+                self.assertTrue(
+                    any(
+                        "return_lse is deprecated" in str(warning.message)
+                        for warning in w
+                    )
+                )
+
+            # Clear for next test
+            _WARNINGS_SHOWN.clear()
+
+            # Test error when both old and new API are used
+            with self.assertRaises(ValueError) as cm:
+                flex_attention(
+                    query,
+                    key,
+                    value,
+                    return_lse=True,
+                    return_aux=FlexAttentionAuxRequest(lse=True),
+                )
+            self.assertIn(
+                "Cannot specify both return_lse and return_aux", str(cm.exception)
+            )
+
+        finally:
+            # Restore original warnings state
+            _WARNINGS_SHOWN.clear()
+            _WARNINGS_SHOWN.update(original_shown)
+
+    @supported_platform
+    @dtypes(*device_configs["cpu"].dtypes_fast)
+    @dtypesIfCUDA(*device_configs["cuda"].dtypes_fast)
     @skip_on_cpu
     def test_dynamic_divisibility_guards(self, device, dtype):
         """Test guards for divisible/non-divisible shape transitions"""
@@ -2776,9 +3007,7 @@ def forward(self, arg0_1, arg1_1, arg2_1, arg3_1, arg4_1):
         def flex_attention_lse_only(q, k, v):
             return flex_attention(q, k, v, return_lse=True)[1]
 
-        func = torch.compile(
-            flex_attention_lse_only, backend="aot_eager", fullgraph=True
-        )
+        func = torch.compile(flex_attention_lse_only, backend="aot_eager")
 
         self.assertTrue(
             torch.autograd.gradcheck(func, (query, key, value), raise_exception=True)
@@ -2804,9 +3033,7 @@ def forward(self, arg0_1, arg1_1, arg2_1, arg3_1, arg4_1):
         k.grad = None
         v.grad = None
 
-        out2, lse2 = torch.compile(flex_attention, fullgraph=True)(
-            q, k, v, return_lse=True
-        )
+        out2, lse2 = torch.compile(flex_attention)(q, k, v, return_lse=True)
         (out2.mean() + (lse2 * lse_mask).sum()).backward()
         q_grad2, k_grad2, v_grad2 = q.grad, k.grad, v.grad
         tolerance = Tolerances(atol=1e-1, rtol=1e-1)
@@ -3325,7 +3552,7 @@ def forward(self, arg0_1, arg1_1, arg2_1, arg3_1, arg4_1):
         query, key, value = make_tensor(), make_tensor(), make_tensor()
         out_eager, lse_eager = flex_attention(query, key, value, return_lse=True)
 
-        flex_compile = torch.compile(flex_attention, fullgraph=True)
+        flex_compile = torch.compile(flex_attention)
         out_compiled, lse_compiled = flex_compile(query, key, value, return_lse=True)
 
         out_paged, lse_paged = self.run_paged_attention(
@@ -4031,7 +4258,7 @@ class GraphModule(torch.nn.Module):
             mask_mod_other_buffers=(),
         ):
             inner_q, inner_k, inner_v = query.elem, key.elem, value.elem
-            out, lse = flex_attention_hop(
+            out, lse, max_scores = flex_attention_hop(
                 inner_q,
                 inner_k,
                 inner_v,
@@ -4042,7 +4269,11 @@ class GraphModule(torch.nn.Module):
                 score_mod_other_buffers,
                 mask_mod_other_buffers,
             )
-            return AsStridedErrorTensor(out), AsStridedErrorTensor(lse)
+            return (
+                AsStridedErrorTensor(out),
+                AsStridedErrorTensor(lse),
+                AsStridedErrorTensor(max_scores),
+            )
 
         # Test setup
         B, H, S, D = 2, 1, 128, 16
@@ -4063,7 +4294,7 @@ class GraphModule(torch.nn.Module):
             )
 
         # Test 2: Run flex_attention with normal tensors first
-        compiled_fn = torch.compile(flex_attention, backend="aot_eager", fullgraph=True)
+        compiled_fn = torch.compile(flex_attention, backend="aot_eager")
         normal_out, normal_lse = compiled_fn(
             query_elem, key_elem, value_elem, return_lse=True
         )
