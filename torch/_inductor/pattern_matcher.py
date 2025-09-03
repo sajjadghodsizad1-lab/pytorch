@@ -1196,16 +1196,48 @@ class ReplacementPatternEntry(PatternEntry):
         output_nodes = match.output_nodes()
 
         if len(output_nodes) == 1:
-            last_node = output_nodes[0]
+            insert_location = output_nodes[0]
         else:
             assert output_nodes[0]
-            nodes = list(output_nodes[0].graph.nodes)
-            indices = [
-                (nodes.index(n), n)
-                for n in output_nodes
-                if isinstance(n, torch.fx.Node)
-            ]
-            last_node = min(indices, key=operator.itemgetter(0))[1]
+            nodes = list(graph.nodes)
+
+            node_indices: dict[torch.fx.Node, int] = {n: nodes.index(n) for n in nodes}
+
+            first_output_node = min(
+                [node for node in output_nodes if isinstance(node, torch.fx.Node)],
+                key=lambda n: node_indices[n],
+            )
+            first_output_idx = node_indices[first_output_node]
+
+            # DFS to get a list of input nodes that have an index lower than the
+            # first_output_idx, so we know which nodes to move before the
+            # first_output_idx
+            input_nodes_to_reorder = []
+            stack = list(match.args) + list(match.kwargs.values())
+            seen_nodes: OrderedSet[torch.fx.Node] = OrderedSet()
+
+            while stack:
+                node = stack.pop()
+                if not isinstance(node, torch.fx.Node):
+                    continue
+                if node in seen_nodes:
+                    continue
+                seen_nodes.add(node)
+
+                if node_indices[node] > first_output_idx:
+                    input_nodes_to_reorder.append(node)
+
+                stack.extend(node.args)
+                stack.extend(node.kwargs.values())
+
+            # Reorder the input nodes to before the first output node
+            for node in reversed(input_nodes_to_reorder):
+                first_output_node.prepend(node)
+
+            # Check for any issues
+            graph.lint()
+
+            insert_location = first_output_node
 
         def percolate_tags(
             node: torch.fx.Node,
@@ -1227,7 +1259,7 @@ class ReplacementPatternEntry(PatternEntry):
                     arg.meta[tag_name] = tag_value
                     queue.extend(arg.all_input_nodes)
 
-        with graph.inserting_before(last_node):
+        with graph.inserting_before(insert_location):
             assert isinstance(replacement_graph, torch.fx.GraphModule)
             replacement = Replacer(replacement_graph).run(*args)
             if isinstance(replacement, torch.fx.Node):
