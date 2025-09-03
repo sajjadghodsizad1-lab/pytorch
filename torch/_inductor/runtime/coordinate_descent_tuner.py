@@ -1,10 +1,11 @@
 # mypy: allow-untyped-defs
 import copy
-import torch
 import itertools
 import logging
 from functools import lru_cache
 from typing import Callable, Optional, TYPE_CHECKING
+
+import torch
 
 from .hints import TRITON_MAX_BLOCK
 from .runtime_utils import red_text, triton_config_to_hashable
@@ -36,11 +37,14 @@ def set_field(config, name, value):
     else:
         config.kwargs[name] = value
 
+
 @lru_cache(maxsize=1)
 def get_warpsmax(self):
     # CUDA/ROCm has a maximum of 1024 threads per block
     warp_size = (
-        torch.cuda.get_device_properties().warp_size if torch.cuda.is_available() else 32
+        torch.cuda.get_device_properties().warp_size 
+        if torch.cuda.is_available() 
+        else 32
     )
     return 1024 // warp_size
 
