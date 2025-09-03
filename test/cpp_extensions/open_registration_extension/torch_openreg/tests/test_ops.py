@@ -2,12 +2,7 @@
 
 import torch
 import torch_openreg  # noqa: F401
-from torch.testing._internal.common_utils import (
-    run_tests,
-    skipIfTorchDynamo,
-    skipIfXpu,
-    TestCase,
-)
+from torch.testing._internal.common_utils import run_tests, skipIfTorchDynamo, TestCase
 
 
 class TestOperators(TestCase):
@@ -99,7 +94,6 @@ class TestSTUB(TestCase):
 
 
 class TestQuantization(TestCase):
-    @skipIfXpu(msg="missing kernel for openreg")
     def test_quantize(self):
         x = torch.randn(3, 4, 5, dtype=torch.float32, device="openreg")
         quantized_tensor = torch.quantize_per_tensor(x, 0.1, 10, torch.qint8)
