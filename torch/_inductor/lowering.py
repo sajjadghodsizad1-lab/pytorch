@@ -1218,31 +1218,10 @@ def slice_(x, dim=0, start=0, end=2**63, step=1, clamp=True):
             return 0
         return None
 
-    start_index, end_index = None, None
-    ambiguous_slice = clamp
-    if ambiguous_slice:
-        start_index = compute_slice_index(start, size, 0)
-        end_index = compute_slice_index(end, size, size)
-        if start_index is not None and end_index is not None:
-            start, end = start_index, end_index
-            ambiguous_slice = False
-
-    # ambiguous_slice=False means we know what semantics this slice call follows,
-    # and don't need to generate an extern kernel to represent the output size.
-    # This is assumed True for clamp=False
-    # (meant to follow standard indexing semantics: 0 <= index < size)
-    if not ambiguous_slice:
-        return TensorBox(
-            ir.SliceView.create(x.data, dim, start, end, step, clamp=clamp)
-        )  # go to SliceView/ReinterpretView
-
-    # unbacked territory: create DynamicSlice ExternKernel
-    # clamp is True, unbacked start / end
-    assert clamp
     unbacked_bindings = resolve_unbacked_bindings(
-        V.graph.sizevars.shape_env, V.graph.current_node.meta["unbacked_bindings"]
+        V.graph.sizevars.shape_env, V.graph.current_node.meta.get("unbacked_bindings", {})
     )
-    assert unbacked_bindings is not None
+
     assert len(unbacked_bindings) <= 2, unbacked_bindings
     sym_size, sym_storage = None, None
     for sym, keypath in unbacked_bindings.items():
@@ -1251,7 +1230,13 @@ def slice_(x, dim=0, start=0, end=2**63, step=1, clamp=True):
         elif keypath == (CallMethodKey("storage_offset"),):
             sym_storage = sym
 
-    assert start_index is None or end_index is None
+    if not clamp or (sym_size is None and sym_storage is None):
+        return TensorBox(
+            ir.SliceView.create(x.data, dim, start, end, step, clamp=clamp)
+        )  # go to SliceView/ReinterpretView
+
+    # handle size
+    assert sym_size is not None
     b_size = ir.DynamicSliceSize(
         sym_size,
         start,
@@ -1263,11 +1248,14 @@ def slice_(x, dim=0, start=0, end=2**63, step=1, clamp=True):
     V.graph.register_operation(b_size)
     new_size = sym_size
 
-    if start_index is not None:
-        # we shouldn't have allocated storage offset symbol if start index was determinable
-        assert sym_storage is None
-        new_storage_offset = x.get_layout().offset + start_index * x.get_stride()[dim]
+    # handle storage offset
+    if sym_storage is None:
+        start_index = compute_slice_index(start, size, 0)
+        new_storage_offset = None
+        if (layout := x.maybe_get_layout()) is not None:
+            new_storage_offset = layout.offset + start_index * x.get_stride()[dim]
     else:
+        assert sym_storage is not None
         b_storage = ir.DynamicSelectStorageOffset(
             sym_storage,
             start,
