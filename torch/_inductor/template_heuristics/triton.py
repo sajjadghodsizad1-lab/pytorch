@@ -1799,6 +1799,18 @@ class CUDAPersistentTMATemplateConfigHeuristic(
         # Override mm_configs to use persistent_mm_configs
         self.mm_configs = self.persistent_mm_configs
 
+    def get_extra_kwargs(
+        self,
+        kernel_inputs: KernelInputs,
+        layout: Layout,
+        op_name: str,
+    ) -> dict[str, Any]:
+        extra_kwargs = super().get_extra_kwargs(kernel_inputs, layout, op_name)
+        return {
+            **extra_kwargs,
+            "tma_store": True,
+        }
+
 
 @register_template_heuristic(
     "mm_persistent_tma",
@@ -1823,6 +1835,18 @@ class CUDAAddmmPersistentTMATemplateConfigHeuristic(
     AddMMConfigMixin, CUDAPersistentTMATemplateConfigHeuristic
 ):
     """Addmm specific mixin for CUDA"""
+
+    def get_extra_kwargs(
+        self,
+        kernel_inputs: KernelInputs,
+        layout: Layout,
+        op_name: str,
+    ) -> dict[str, Any]:
+        extra_kwargs = super().get_extra_kwargs(kernel_inputs, layout, op_name)
+        return {
+            **extra_kwargs,
+            "tma_store": True,
+        }
 
 
 # TODO(coconutruben): replace with template.name once templates are importable
