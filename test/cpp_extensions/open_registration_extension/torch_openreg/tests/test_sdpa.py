@@ -1,18 +1,20 @@
-# Owner(s): ["module: sdpa"]
+# Owner(s): ["module: PrivateUse1"]
 
+import collections
+import functools
 import unittest
-from collections import namedtuple
-from functools import partial
-
-import torch_openreg  # noqa: F401
 
 import torch
+
+import torch_openreg  # noqa: F401
 from torch.nn.attention import SDPBackend
 from torch.testing._internal.common_nn import NNTestCase
 from torch.testing._internal.common_utils import run_tests, skipIfTorchDynamo, TEST_XPU
 
 
-SdpaShape = namedtuple("Sdpa_Shape", ["batch", "num_heads", "seq_len", "head_dim"])
+SdpaShape = collections.namedtuple(
+    "Sdpa_Shape", ["batch", "num_heads", "seq_len", "head_dim"]
+)
 
 
 @unittest.skipIf(TEST_XPU, "XPU does not support cppextension currently")
@@ -20,7 +22,7 @@ class TestSDPAPrivateUse1Only(NNTestCase):
     @skipIfTorchDynamo()
     def test_fused_sdp_choice_privateuseone(self):
         batch_size, seq_len, num_heads, head_dim = 4, 256, 2, 128
-        make_tensor = partial(torch.rand, device="cpu", dtype=torch.float16)
+        make_tensor = functools.partial(torch.rand, device="cpu", dtype=torch.float16)
         shape = SdpaShape(batch_size, num_heads, seq_len, head_dim)
         q_cpu, k_cpu, v_cpu = make_tensor(shape), make_tensor(shape), make_tensor(shape)
         q_privateuse1 = q_cpu.to("openreg")
@@ -33,7 +35,7 @@ class TestSDPAPrivateUse1Only(NNTestCase):
 
     def test_scaled_dot_product_fused_attention_overrideable(self):
         batch_size, seq_len, num_heads, head_dim = 4, 256, 2, 128
-        make_tensor = partial(torch.rand, device="cpu", dtype=torch.float16)
+        make_tensor = functools.partial(torch.rand, device="cpu", dtype=torch.float16)
         shape = SdpaShape(batch_size, num_heads, seq_len, head_dim)
         q_cpu, k_cpu, v_cpu = make_tensor(shape), make_tensor(shape), make_tensor(shape)
         q_privateuse1 = q_cpu.to("openreg")
@@ -45,7 +47,7 @@ class TestSDPAPrivateUse1Only(NNTestCase):
 
     def test_scaled_dot_product_fused_attention_overrideable_backward(self):
         batch_size, seq_len, num_heads, head_dim = 4, 256, 2, 128
-        make_tensor = partial(
+        make_tensor = functools.partial(
             torch.rand, device="cpu", dtype=torch.float16, requires_grad=True
         )
         shape = (batch_size, num_heads, seq_len, head_dim)
