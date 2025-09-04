@@ -16,6 +16,13 @@ from torch.utils._ordered_set import OrderedSet
 from torch.utils._triton import has_triton_stable_tma_api
 
 from .. import config, config as inductor_config
+from ..kernel.bmm import bmm_template
+from ..kernel.mm import (
+    mm_template,
+    persistent_tma_mm_template,
+    scaled_mm_device_tma_template,
+)
+from ..kernel.mm_plus_mm import mm_plus_mm_template
 from ..kernel_inputs import KernelInputs, MMKernelInputs
 from ..utils import (
     get_backend_num_stages,
@@ -1786,28 +1793,31 @@ class ScaledTMAConfigMixin(TMAWorkspaceMixin, BaseScaledMMConfigMixin):
 # Template-specific heuristic classes using multiple inheritance
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
-@register_template_heuristic("mm", "cuda", register=torch.version.hip is None)
-# TODO(coconutruben): replace with template.name once templates are importable
-@register_template_heuristic("bmm", "cuda", register=torch.version.hip is None)
+@register_template_heuristic(
+    mm_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
+)
+@register_template_heuristic(
+    bmm_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
+)
 class CUDAMMTemplateConfigHeuristic(MMTemplateConfigMixin, CUDAConfigHeuristic):
     """Standard MM template heuristic for CUDA"""
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm", "cuda", register=torch.version.hip is None, op_name="addmm"
+    mm_template.uid, "cuda", register=torch.version.hip is None, op_name="addmm"
 )
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "bmm", "cuda", register=torch.version.hip is None, op_name="baddbmm"
+    bmm_template.uid, "cuda", register=torch.version.hip is None, op_name="baddbmm"
 )
 class CUDAAddMMTemplateConfigHeuristic(AddMMConfigMixin, CUDAMMTemplateConfigHeuristic):
     """Addmm specific mixin for CUDA"""
 
 
 # TODO(coconutruben): deprecate once autoheuristic is deprecated
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic("mm-ah", "cuda", register=torch.version.hip is None)
 class CUDAMMAHTemplateConfigHeuristic(MMTemplateConfigMixin, CUDAConfigHeuristic):
     """Standard MM template heuristic for CUDA using the extra mm configs only (for autoheuristic)"""
@@ -1819,9 +1829,10 @@ class CUDAMMAHTemplateConfigHeuristic(MMTemplateConfigMixin, CUDAConfigHeuristic
         self.exhaustive_configs = self.extra_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm_persistent_tma", "cuda", register=torch.version.hip is None
+    persistent_tma_mm_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
 )
 class CUDAPersistentTMATemplateConfigHeuristic(
     TMATemplateConfigMixin, CUDAConfigHeuristic
@@ -1835,7 +1846,7 @@ class CUDAPersistentTMATemplateConfigHeuristic(
 
 
 @register_template_heuristic(
-    "mm_persistent_tma",
+    persistent_tma_mm_template.uid,
     "xpu",
 )
 class XPUPersistentTMATemplateConfigHeuristic(
@@ -1849,9 +1860,22 @@ class XPUPersistentTMATemplateConfigHeuristic(
         self.mm_configs = self.persistent_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm_persistent_tma", "cuda", register=torch.version.hip is None, op_name="addmm"
+    persistent_tma_mm_template.uid,
+    "xpu",
+    op_name="addmm",
+)
+class XPUAddmmPersistentTMATemplateConfigHeuristic(
+    AddMMConfigMixin, XPUPersistentTMATemplateConfigHeuristic
+):
+    """Addmm specific mixin for XPU"""
+
+
+@register_template_heuristic(
+    persistent_tma_mm_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
+    op_name="addmm",
 )
 class CUDAAddmmPersistentTMATemplateConfigHeuristic(
     AddMMConfigMixin, CUDAPersistentTMATemplateConfigHeuristic
@@ -1859,9 +1883,8 @@ class CUDAAddmmPersistentTMATemplateConfigHeuristic(
     """Addmm specific mixin for CUDA"""
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm", "cuda", register=torch.version.hip is None, op_name="scaled_mm"
+    mm_template.uid, "cuda", register=torch.version.hip is None, op_name="scaled_mm"
 )
 class CUDAScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, CUDAConfigHeuristic):
     """Scaled MM template heuristic for CUDA"""
@@ -1877,9 +1900,10 @@ class CUDAScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, CUDAConfigHeurist
         self.exhaustive_configs = self.scaled_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "scaled_mm_device_tma", "cuda", register=torch.version.hip is None
+    scaled_mm_device_tma_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
 )
 class CUDAScaledTMATemplateConfigHeuristic(ScaledTMAConfigMixin, CUDAConfigHeuristic):
     """Scaled TMA template heuristic for CUDA"""
@@ -1895,8 +1919,11 @@ class CUDAScaledTMATemplateConfigHeuristic(ScaledTMAConfigMixin, CUDAConfigHeuri
         self.exhaustive_configs = self.scaled_persistent_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
-@register_template_heuristic("mm_plus_mm", "cuda", register=torch.version.hip is None)
+@register_template_heuristic(
+    mm_plus_mm_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
+)
 class CUDAMMPlusMMTemplateConfigHeuristic(
     MMPlusMMTemplateConfigMixin, CUDAConfigHeuristic
 ):
@@ -1913,9 +1940,11 @@ class CUDAMMPlusMMTemplateConfigHeuristic(
         self.exhaustive_configs = self.mm_plus_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm", "cuda", register=torch.version.hip is None, op_name="int_mm"
+    mm_template.uid,
+    "cuda",
+    register=torch.version.hip is None,
+    op_name="int_mm",
 )
 class CUDAInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, CUDAConfigHeuristic):
     """Int8 MM template heuristic for CUDA"""
@@ -1934,28 +1963,33 @@ class CUDAInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, CUDAConfigHeu
 # ROCm template-specific classes
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
-@register_template_heuristic("mm", "cuda", register=torch.version.hip is not None)
-# TODO(coconutruben): replace with template.name once templates are importable
-@register_template_heuristic("bmm", "cuda", register=torch.version.hip is not None)
+@register_template_heuristic(
+    mm_template.uid,
+    "cuda",
+    register=torch.version.hip is not None,
+)
+@register_template_heuristic(
+    bmm_template.uid,
+    "cuda",
+    register=torch.version.hip is not None,
+)
 class ROCmMMTemplateConfigHeuristic(MMTemplateConfigMixin, ROCmConfigHeuristic):
     """Standard MM template heuristic for ROCm"""
 
 
 # TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm", "cuda", register=torch.version.hip is not None, op_name="addmm"
+    mm_template.uid, "cuda", register=torch.version.hip is not None, op_name="addmm"
 )
 # TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "bmm", "cuda", register=torch.version.hip is not None, op_name="baddbmm"
+    bmm_template.uid, "cuda", register=torch.version.hip is not None, op_name="baddbmm"
 )
 class ROCmAddMMTemplateConfigHeuristic(AddMMConfigMixin, ROCmMMTemplateConfigHeuristic):
     """Addmm specific mixin for ROCm"""
 
 
 # TODO(coconutruben): deprecate once autoheuristic is deprecated
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic("mm-ah", "cuda", register=torch.version.hip is not None)
 class ROCmMMAHTemplateConfigHeuristic(MMTemplateConfigMixin, ROCmConfigHeuristic):
     """Standard MM template heuristic for ROCm using the extra mm configs only (for autoheuristic)"""
@@ -1967,9 +2001,11 @@ class ROCmMMAHTemplateConfigHeuristic(MMTemplateConfigMixin, ROCmConfigHeuristic
         self.exhaustive_configs = self.extra_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm", "cuda", register=torch.version.hip is not None, op_name="scaled_mm"
+    mm_template.uid,
+    "cuda",
+    register=torch.version.hip is not None,
+    op_name="scaled_mm",
 )
 class ROCmScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, ROCmConfigHeuristic):
     """Scaled MM template heuristic for ROCm (non-TMA)"""
@@ -1985,9 +2021,11 @@ class ROCmScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, ROCmConfigHeurist
         self.exhaustive_configs = self.scaled_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm", "cuda", register=torch.version.hip is not None, op_name="int_mm"
+    mm_template.uid,
+    "cuda",
+    register=torch.version.hip is not None,
+    op_name="int_mm",
 )
 class ROCmInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, ROCmConfigHeuristic):
     """Int8 MM template heuristic for ROCm"""
@@ -2003,9 +2041,10 @@ class ROCmInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, ROCmConfigHeu
         self.exhaustive_configs = self.int8_mm_configs
 
 
-# TODO(coconutruben): replace with template.name once templates are importable
 @register_template_heuristic(
-    "mm_plus_mm", "cuda", register=torch.version.hip is not None
+    mm_plus_mm_template.uid,
+    "cuda",
+    register=torch.version.hip is not None,
 )
 class ROCmMMPlusMMTemplateConfigHeuristic(
     MMPlusMMTemplateConfigMixin, ROCmConfigHeuristic
@@ -2029,19 +2068,19 @@ class ROCmMMPlusMMTemplateConfigHeuristic(
 # CPU template-specific classes
 
 
-@register_template_heuristic("mm", "cpu")
-@register_template_heuristic("bmm", "cpu")
+@register_template_heuristic(mm_template.uid, "cpu")
+@register_template_heuristic(bmm_template.uid, "cpu")
 class CPUMMTemplateConfigHeuristic(MMTemplateConfigMixin, CPUConfigHeuristic):
     """Standard MM template heuristic for CPU"""
 
 
-@register_template_heuristic("mm", "cpu", op_name="addmm")
-@register_template_heuristic("bmm", "cpu", op_name="baddbmm")
+@register_template_heuristic(mm_template.uid, "cpu", op_name="addmm")
+@register_template_heuristic(bmm_template.uid, "cpu", op_name="baddbmm")
 class CPUAddmmTemplateConfigHeuristic(AddMMConfigMixin, CPUMMTemplateConfigHeuristic):
     """Addmm specific mixin for CPU"""
 
 
-@register_template_heuristic("mm", "cpu", op_name="scaled_mm")
+@register_template_heuristic(mm_template.uid, "cpu", op_name="scaled_mm")
 class CPUScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, CPUConfigHeuristic):
     """Scaled MM template heuristic for CPU (non-TMA)"""
 
@@ -2056,7 +2095,7 @@ class CPUScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, CPUConfigHeuristic
         self.exhaustive_configs = self.scaled_mm_configs
 
 
-@register_template_heuristic("mm", "cpu", op_name="int_mm")
+@register_template_heuristic(mm_template.uid, "cpu", op_name="int_mm")
 class CPUInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, CPUConfigHeuristic):
     """Int8 MM template heuristic for CPU"""
 
@@ -2071,7 +2110,7 @@ class CPUInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, CPUConfigHeuri
         self.exhaustive_configs = self.int8_mm_configs
 
 
-@register_template_heuristic("mm_plus_mm", "cpu")
+@register_template_heuristic(mm_plus_mm_template.uid, "cpu")
 class CPUMMPlusMMTemplateConfigHeuristic(
     MMPlusMMTemplateConfigMixin, CPUConfigHeuristic
 ):
@@ -2091,19 +2130,19 @@ class CPUMMPlusMMTemplateConfigHeuristic(
 # XPU template-specific classes
 
 
-@register_template_heuristic("mm", "xpu")
-@register_template_heuristic("bmm", "xpu")
+@register_template_heuristic(mm_template.uid, "xpu")
+@register_template_heuristic(bmm_template.uid, "xpu")
 class XPUMMTemplateConfigHeuristic(MMTemplateConfigMixin, XPUConfigHeuristic):
     """Standard MM template heuristic for XPU"""
 
 
-@register_template_heuristic("mm", "xpu", op_name="addmm")
-@register_template_heuristic("bmm", "xpu", op_name="baddbmm")
+@register_template_heuristic(mm_template.uid, "xpu", op_name="addmm")
+@register_template_heuristic(bmm_template.uid, "xpu", op_name="baddbmm")
 class XPUAddmmTemplateConfigHeuristic(AddMMConfigMixin, XPUMMTemplateConfigHeuristic):
     """Addmm specific mixin for XPU"""
 
 
-@register_template_heuristic("mm", "xpu", op_name="scaled_mm")
+@register_template_heuristic(mm_template.uid, "xpu", op_name="scaled_mm")
 class XPUScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, XPUConfigHeuristic):
     """Scaled MM template heuristic for XPU (non-TMA)"""
 
@@ -2118,7 +2157,7 @@ class XPUScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, XPUConfigHeuristic
         self.exhaustive_configs = self.scaled_mm_configs
 
 
-@register_template_heuristic("mm", "xpu", op_name="int_mm")
+@register_template_heuristic(mm_template.uid, "xpu", op_name="int_mm")
 class XPUInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, XPUConfigHeuristic):
     """Int8 MM template heuristic for XPU"""
 
@@ -2133,7 +2172,7 @@ class XPUInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, XPUConfigHeuri
         self.exhaustive_configs = self.int8_mm_configs
 
 
-@register_template_heuristic("mm_plus_mm", "xpu")
+@register_template_heuristic(mm_plus_mm_template.uid, "xpu")
 class XPUMMPlusMMTemplateConfigHeuristic(
     MMPlusMMTemplateConfigMixin, XPUConfigHeuristic
 ):
@@ -2153,19 +2192,19 @@ class XPUMMPlusMMTemplateConfigHeuristic(
 # MTIA template-specific classes
 
 
-@register_template_heuristic("mm", "mtia")
-@register_template_heuristic("bmm", "mtia")
+@register_template_heuristic(mm_template.uid, "mtia")
+@register_template_heuristic(bmm_template.uid, "mtia")
 class MTIAMMTemplateConfigHeuristic(MMTemplateConfigMixin, MTIAConfigHeuristic):
     """Standard MM template heuristic for MTIA"""
 
 
-@register_template_heuristic("mm", "mtia", op_name="addmm")
-@register_template_heuristic("bmm", "mtia", op_name="baddbmm")
+@register_template_heuristic(mm_template.uid, "mtia", op_name="addmm")
+@register_template_heuristic(bmm_template.uid, "mtia", op_name="baddbmm")
 class MTIAAddMMTemplateConfigHeuristic(AddMMConfigMixin, MTIAMMTemplateConfigHeuristic):
     """Addmm specific mixin for MTIA"""
 
 
-@register_template_heuristic("mm", "mtia", op_name="scaled_mm")
+@register_template_heuristic(mm_template.uid, "mtia", op_name="scaled_mm")
 class MTIAScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, MTIAConfigHeuristic):
     """Scaled MM template heuristic for MTIA (non-TMA)"""
 
@@ -2180,7 +2219,7 @@ class MTIAScaledMMTemplateConfigHeuristic(ScaledMMConfigMixin, MTIAConfigHeurist
         self.exhaustive_configs = self.scaled_mm_configs
 
 
-@register_template_heuristic("mm", "mtia", op_name="int_mm")
+@register_template_heuristic(mm_template.uid, "mtia", op_name="int_mm")
 class MTIAInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, MTIAConfigHeuristic):
     """Int8 MM template heuristic for MTIA"""
 
@@ -2195,7 +2234,7 @@ class MTIAInt8MMTemplateConfigHeuristic(INT8MMTemplateConfigMixin, MTIAConfigHeu
         self.exhaustive_configs = self.int8_mm_configs
 
 
-@register_template_heuristic("mm_plus_mm", "mtia")
+@register_template_heuristic(mm_plus_mm_template.uid, "mtia")
 class MTIAMMPlusMMTemplateConfigHeuristic(
     MMPlusMMTemplateConfigMixin, MTIAConfigHeuristic
 ):
