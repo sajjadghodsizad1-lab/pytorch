@@ -1563,6 +1563,24 @@ class MMPlusMMTemplateConfigMixin(MMTemplateConfigMixin):
         super().__init__()
         self.should_scale_configs = False
 
+    def _get_template_configs_impl(
+        self,
+        kernel_inputs: KernelInputs,
+        layout: Any,
+        op_name: str,
+        max_autotune: bool = False,
+    ) -> Generator[dict[str, Any], None, None]:
+        assert isinstance(kernel_inputs, MMKernelInputs), "Expect MMKernelInputs"
+        m, n, k = kernel_inputs.mnk_symbolic()
+        for kwargs in super()._get_template_configs_impl(
+            kernel_inputs, layout, op_name, max_autotune
+        ):
+            # Apply BLOCK_K constraint specific to mm_plus_mm
+            # see https://github.com/triton-lang/triton/issues/1298
+            # BLOCK_K = K causes llvm error
+            if V.graph.sizevars.statically_known_lt(kwargs.get("BLOCK_K", k), k):
+                yield kwargs
+
 
 class TMAWorkspaceMixin(MMTemplateConfigMixin):
     """
