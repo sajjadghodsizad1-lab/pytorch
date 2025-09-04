@@ -12,6 +12,7 @@ from ..kernel.mm import (
 from ..kernel_inputs import KernelInputs, MMKernelInputs
 from ..utils import use_contiguous
 from .base import TemplateConfigHeuristics
+from .gemm import GemmMaxAutotuneTemplateConfigHeuristics
 from .registry import register_template_heuristic
 
 
@@ -41,12 +42,13 @@ class EmptyContiguousMMConfigHeuristics(TemplateConfigHeuristics):
     register=torch.version.hip is not None,
     op_name="addmm",
 )
-class ContiguousMMHeuristics(TemplateConfigHeuristics):
-    def get_template_configs(
+class ContiguousMMHeuristics(GemmMaxAutotuneTemplateConfigHeuristics):
+    def _get_template_configs_impl(
         self,
         kernel_inputs: KernelInputs,
         layout: Layout,
         op_name: str,
+        max_autotune: bool = False,
     ) -> Generator[dict[str, Any], None, None]:
         """
         Get all the valid k_splits for the given m, n, k.
@@ -54,7 +56,9 @@ class ContiguousMMHeuristics(TemplateConfigHeuristics):
         assert isinstance(kernel_inputs, MMKernelInputs), (
             f"{self.__class__.__name__} requires MMKernelInputs"
         )
-
+        if not max_autotune:
+            # max-autotune only optimization
+            return
         # Check for unbacked symbols - if found, yield nothing
         unbacked_symbols = any(
             len(get_free_symbols(itr, unbacked_only=True)) > 0
